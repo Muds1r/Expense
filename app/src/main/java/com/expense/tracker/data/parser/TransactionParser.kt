@@ -13,7 +13,7 @@ import com.expense.tracker.data.db.TxnType
 object TransactionParser {
 
     private val amountRegex = Regex(
-        """(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)""",
+        """(?:Rs\.?|PKR|₨)\s*([\d,]+(?:\.\d{1,2})?)""",
         RegexOption.IGNORE_CASE
     )
 

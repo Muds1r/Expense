@@ -1,6 +1,7 @@
 package com.expense.tracker.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,7 +23,22 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun SignInScreen(onSignInClick: () -> Unit) {
+fun SignInScreen(onSignInClick: () -> Unit, errorMessage: String? = null) {
+    Box(Modifier.fillMaxSize()) {
+        SignInContent(onSignInClick, errorMessage)
+        Text(
+            "Made By Muds1r",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+        )
+    }
+}
+
+@Composable
+private fun SignInContent(onSignInClick: () -> Unit, errorMessage: String?) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -52,6 +70,21 @@ fun SignInScreen(onSignInClick: () -> Unit) {
         Spacer(Modifier.height(32.dp))
         Button(onClick = onSignInClick) {
             Text("Sign in with Google")
+        }
+        if (errorMessage != null) {
+            Spacer(Modifier.height(24.dp))
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Text(
+                    errorMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
         }
     }
 }

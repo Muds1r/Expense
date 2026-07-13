@@ -5,8 +5,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Dashboard
@@ -29,7 +35,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +57,8 @@ import com.expense.tracker.ui.theme.ExpenseTrackerTheme
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
+import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import com.google.api.services.gmail.GmailScopes
 
@@ -82,13 +92,32 @@ private fun App(signInClient: GoogleSignInClient) {
     val accountName by viewModel.accountName.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var signInError by remember { mutableStateOf<String?>(null) }
 
     val signInLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         GoogleSignIn.getSignedInAccountFromIntent(result.data)
             .addOnSuccessListener { account ->
+                signInError = null
                 account.email?.let { viewModel.onSignedIn(it) }
+            }
+            .addOnFailureListener { e ->
+                val code = (e as? ApiException)?.statusCode
+                signInError = when (code) {
+                    GoogleSignInStatusCodes.DEVELOPER_ERROR ->
+                        "Sign-in rejected by Google (error 10: developer error).\n\n" +
+                            "This app's package name + SHA-1 aren't registered. In Google " +
+                            "Cloud Console create an Android OAuth client with package " +
+                            "\"com.expense.tracker\" and this device build's debug SHA-1, " +
+                            "and make sure your Gmail address is added as a test user."
+                    GoogleSignInStatusCodes.SIGN_IN_CANCELLED ->
+                        "Sign-in was cancelled."
+                    GoogleSignInStatusCodes.NETWORK_ERROR ->
+                        "Network error during sign-in. Check your connection and retry."
+                    else ->
+                        "Sign-in failed (code $code): ${e.message ?: "unknown error"}"
+                }
             }
     }
 
@@ -107,7 +136,13 @@ private fun App(signInClient: GoogleSignInClient) {
     }
 
     if (accountName == null) {
-        SignInScreen(onSignInClick = { signInLauncher.launch(signInClient.signInIntent) })
+        SignInScreen(
+            onSignInClick = {
+                signInError = null
+                signInLauncher.launch(signInClient.signInIntent)
+            },
+            errorMessage = signInError
+        )
         return
     }
 
@@ -150,21 +185,34 @@ private fun App(signInClient: GoogleSignInClient) {
             )
         },
         bottomBar = {
-            NavigationBar {
-                tabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = currentRoute == tab.route,
-                        onClick = {
-                            navController.navigate(tab.route) {
-                                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label) }
-                    )
+            Column {
+                NavigationBar(windowInsets = WindowInsets(0)) {
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = currentRoute == tab.route,
+                            onClick = {
+                                navController.navigate(tab.route) {
+                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = { Icon(tab.icon, contentDescription = tab.label) },
+                            label = { Text(tab.label) }
+                        )
+                    }
                 }
+                Text(
+                    "Made By Muds1r",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .navigationBarsPadding()
+                        .padding(bottom = 4.dp)
+                )
             }
         }
     ) { padding ->
