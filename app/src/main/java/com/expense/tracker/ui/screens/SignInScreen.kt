@@ -56,7 +56,7 @@ fun SetupScreen(
                 Icons.Default.AccountBalance,
                 contentDescription = null,
                 modifier = Modifier.height(64.dp),
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
+                tint = MaterialTheme.colorScheme.primary
             )
             Spacer(Modifier.height(24.dp))
             Text(
@@ -113,7 +113,7 @@ fun SetupScreen(
                 CircularProgressIndicator()
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Connecting to Gmail and fetching transactions…",
+                    "Connecting to Gmail and fetching transactions\u2026",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -142,7 +142,7 @@ fun SetupScreen(
         Text(
             "Made By Muds1r",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 16.dp)

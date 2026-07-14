@@ -1,6 +1,8 @@
 package com.expense.tracker.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,9 +23,12 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.expense.tracker.data.db.BankSummary
+import com.expense.tracker.ui.DailySpending
 import com.expense.tracker.ui.MainViewModel
 import com.expense.tracker.ui.formatAmount
 import com.expense.tracker.ui.theme.ExpenseRed
@@ -33,6 +39,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
     val summaries by viewModel.bankSummaries.collectAsState()
     val totalIn = summaries.sumOf { it.totalIn }
     val totalOut = summaries.sumOf { it.totalOut }
+    val dailySpend by viewModel.dailySpend.collectAsState()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -41,6 +48,12 @@ fun DashboardScreen(viewModel: MainViewModel) {
     ) {
         item { RangeSelector(viewModel) }
         item { NetBalanceCard(totalIn, totalOut) }
+
+        if (dailySpend.isNotEmpty()) {
+            item { SectionHeader("Daily spending") }
+            item { DailySpendingChart(dailySpend) }
+        }
+
         item { SectionHeader("By bank") }
         if (summaries.isEmpty()) {
             item { EmptyState("No transactions yet. Tap the sync icon to fetch your Gmail alerts.") }
@@ -70,6 +83,74 @@ private fun NetBalanceCard(totalIn: Double, totalOut: Double) {
             Row {
                 StatItem("Received", totalIn, IncomeGreen, Modifier.weight(1f))
                 StatItem("Spent", totalOut, ExpenseRed, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DailySpendingChart(days: List<DailySpending>) {
+    val maxOut = days.maxOfOrNull { it.totalOut }?.coerceAtLeast(1.0) ?: 1.0
+
+    SoftCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp)) {
+            Text(
+                "Spending per day",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+
+            val barHeight = 120.dp
+            val barColor = MaterialTheme.colorScheme.primary
+            val trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
+
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(barHeight + 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                val displayDays = days.takeLast(14)
+                displayDays.forEach { day ->
+                    val fraction = (day.totalOut / maxOut).toFloat().coerceIn(0f, 1f)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        if (day.totalOut > 0) {
+                            Text(
+                                formatAmount(day.totalOut),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(barHeight * fraction.coerceAtLeast(0.05f))
+                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                .background(barColor)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            day.dayLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            day.date.take(5),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
         }
     }

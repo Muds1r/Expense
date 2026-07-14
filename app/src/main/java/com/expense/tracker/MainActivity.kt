@@ -9,7 +9,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,17 +19,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -42,7 +42,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -60,6 +62,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.expense.tracker.ui.MainViewModel
 import com.expense.tracker.ui.SyncState
+import com.expense.tracker.ui.screens.AddManualTransactionDialog
 import com.expense.tracker.ui.screens.CategoriesScreen
 import com.expense.tracker.ui.screens.CategoryDetailScreen
 import com.expense.tracker.ui.screens.DashboardScreen
@@ -96,7 +99,7 @@ private fun App() {
 
     val notificationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { /* Sync proceeds either way; FG notification needs grant on API 33+. */ }
+    ) { }
 
     fun ensureNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
@@ -129,7 +132,6 @@ private fun App() {
         when (val state = syncState) {
             is SyncState.Error -> snackbarHostState.showSnackbar("Sync failed: ${state.message}")
             is SyncState.Success -> {
-                // Ignore stale WorkManager success from a previous session.
                 if (System.currentTimeMillis() - state.at <= SNACKBAR_FRESH_MS) {
                     snackbarHostState.showSnackbar("Synced ${state.count} transactions")
                 }
@@ -162,7 +164,7 @@ private fun App() {
         navController.navigate("category/${id ?: -1L}")
     }
 
-    val barContainer = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f)
+    var showAddManual by remember { mutableStateOf(false) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -170,8 +172,8 @@ private fun App() {
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = barContainer,
-                    scrolledContainerColor = barContainer
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background
                 ),
                 navigationIcon = {
                     if (isDetail) {
@@ -223,13 +225,22 @@ private fun App() {
                 }
             )
         },
+        floatingActionButton = {
+            if (!isDetail && currentRoute == "transactions") {
+                FloatingActionButton(
+                    onClick = { showAddManual = true },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add manual transaction")
+                }
+            }
+        },
         bottomBar = {
             if (!isDetail) {
                 Column {
                     NavigationBar(
                         windowInsets = WindowInsets(0),
-                        containerColor = barContainer,
-                        tonalElevation = NavigationBarDefaults.Elevation
+                        containerColor = MaterialTheme.colorScheme.surface
                     ) {
                         tabs.forEach { tab ->
                             NavigationBarItem(
@@ -249,11 +260,11 @@ private fun App() {
                     Text(
                         "Made By Muds1r",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(barContainer)
+                            .background(MaterialTheme.colorScheme.surface)
                             .navigationBarsPadding()
                             .padding(bottom = 4.dp)
                     )
@@ -289,5 +300,16 @@ private fun App() {
                 TransactionDetailScreen(viewModel, id)
             }
         }
+    }
+
+    if (showAddManual) {
+        AddManualTransactionDialog(
+            categories = viewModel.categories.collectAsState().value.map { it.id to it.name },
+            onConfirm = { bank, counterparty, amount, type, note, categoryId ->
+                viewModel.addManualTransaction(bank, counterparty, amount, type, note, categoryId)
+                showAddManual = false
+            },
+            onDismiss = { showAddManual = false }
+        )
     }
 }

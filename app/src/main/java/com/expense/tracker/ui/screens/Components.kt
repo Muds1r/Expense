@@ -1,6 +1,5 @@
 package com.expense.tracker.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -16,25 +15,43 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.expense.tracker.data.db.TransactionEntity
@@ -45,8 +62,12 @@ import com.expense.tracker.ui.formatAmount
 import com.expense.tracker.ui.formatDate
 import com.expense.tracker.ui.theme.ExpenseRed
 import com.expense.tracker.ui.theme.IncomeGreen
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-/** Soft translucent card — minimal elevation, light border. */
+val CardShape = RoundedCornerShape(16.dp)
+
 @Composable
 fun SoftCard(
     modifier: Modifier = Modifier,
@@ -57,12 +78,11 @@ fun SoftCard(
         modifier = modifier.then(
             if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
         ),
-        shape = RoundedCornerShape(16.dp),
+        shape = CardShape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.52f)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(content = content)
     }
@@ -75,31 +95,104 @@ fun SoftHeroCard(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
+        shape = CardShape,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(content = content)
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RangeSelector(viewModel: MainViewModel) {
     val range by viewModel.range.collectAsState()
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        RangePreset.entries.forEachIndexed { index, preset ->
-            SegmentedButton(
-                selected = range == preset,
-                onClick = { viewModel.setRange(preset) },
-                shape = SegmentedButtonDefaults.itemShape(index, RangePreset.entries.size),
-                label = { Text(preset.label) },
-                colors = SegmentedButtonDefaults.colors(
-                    inactiveContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.35f)
+    val customStart by viewModel.customStart.collectAsState()
+    val customEnd by viewModel.customEnd.collectAsState()
+
+    var showStartPicker by remember { mutableStateOf(false) }
+    var showEndPicker by remember { mutableStateOf(false) }
+
+    val dateFmt = remember { SimpleDateFormat("d MMM yyyy", Locale.getDefault()) }
+    val customLabel = if (customStart != null && customEnd != null) {
+        "${dateFmt.format(Date(customStart!!))} - ${dateFmt.format(Date(customEnd!!))}"
+    } else {
+        "Custom"
+    }
+
+    Column {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            RangePreset.entries.forEachIndexed { index, preset ->
+                SegmentedButton(
+                    selected = range == preset,
+                    onClick = {
+                        if (preset == RangePreset.CUSTOM) {
+                            showStartPicker = true
+                        } else {
+                            viewModel.setRange(preset)
+                        }
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(index, RangePreset.entries.size),
+                    label = {
+                        if (preset == RangePreset.CUSTOM && customStart != null) {
+                            Text(customLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        } else {
+                            Text(preset.label)
+                        }
+                    },
+                    colors = SegmentedButtonDefaults.colors(
+                        inactiveContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    )
                 )
-            )
+            }
+        }
+    }
+
+    if (showStartPicker) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = customStart ?: System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showStartPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { viewModel.setCustomRange(it, customEnd ?: System.currentTimeMillis()) }
+                    showStartPicker = false
+                    showEndPicker = true
+                }) { Text("Next") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartPicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = state)
+        }
+    }
+
+    if (showEndPicker) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = customEnd ?: System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showEndPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val start = customStart ?: System.currentTimeMillis()
+                    state.selectedDateMillis?.let { end ->
+                        if (end >= start) {
+                            viewModel.setCustomRange(start, end)
+                        }
+                    }
+                    showEndPicker = false
+                }) { Text("Apply") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndPicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = state)
         }
     }
 }
@@ -153,13 +246,13 @@ fun EmptyState(message: String) {
             Icons.Outlined.Inbox,
             contentDescription = null,
             modifier = Modifier.size(36.dp),
-            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+            tint = MaterialTheme.colorScheme.outline
         )
         Spacer(Modifier.height(8.dp))
         Text(
             message,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -177,12 +270,12 @@ fun InitialAvatar(name: String, tint: Color, size: Int = 40) {
         modifier = Modifier
             .size(size.dp)
             .clip(CircleShape)
-            .background(tint.copy(alpha = 0.12f)),
+            .background(tint.copy(alpha = 0.10f)),
         contentAlignment = Alignment.Center
     ) {
         Text(
             initialsOf(name),
-            color = tint.copy(alpha = 0.9f),
+            color = tint,
             fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.labelLarge
         )
@@ -192,7 +285,11 @@ fun InitialAvatar(name: String, tint: Color, size: Int = 40) {
 @Composable
 fun TransactionRow(txn: TransactionEntity, showDate: Boolean = true, onClick: (() -> Unit)? = null) {
     val isCredit = txn.type == TxnType.CREDIT
-    val color = if (isCredit) IncomeGreen else ExpenseRed
+    val color = when {
+        txn.isTransfer -> MaterialTheme.colorScheme.primary
+        isCredit -> IncomeGreen
+        else -> ExpenseRed
+    }
     SoftCard(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick
@@ -204,20 +301,34 @@ fun TransactionRow(txn: TransactionEntity, showDate: Boolean = true, onClick: ((
             InitialAvatar(txn.counterparty ?: txn.bank, color)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(
-                    txn.counterparty ?: txn.bank,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        txn.counterparty ?: txn.bank,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (txn.isTransfer) {
+                        Spacer(Modifier.width(6.dp))
+                        Badge("Transfer")
+                    } else if (txn.isManual) {
+                        Spacer(Modifier.width(6.dp))
+                        Badge("Manual")
+                    }
+                }
                 Text(
                     buildString {
                         append(txn.bank)
-                        txn.accountLast4?.let { append(" ••$it") }
+                        txn.accountLast4?.let { append(" \u2022\u2022$it") }
                         if (showDate) {
-                            append(" · ")
+                            append(" \u00b7 ")
                             append(formatDate(txn.timestamp))
+                        }
+                        if (!txn.note.isNullOrBlank()) {
+                            append(" \u00b7 ")
+                            append(txn.note)
                         }
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -235,6 +346,19 @@ fun TransactionRow(txn: TransactionEntity, showDate: Boolean = true, onClick: ((
             )
         }
     }
+}
+
+@Composable
+private fun Badge(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    )
 }
 
 @Composable
@@ -286,15 +410,15 @@ fun RankedRow(
                     Modifier
                         .fillMaxWidth()
                         .height(5.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(MaterialTheme.colorScheme.outlineVariant)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 ) {
                     Box(
                         Modifier
                             .fillMaxWidth(fraction.coerceIn(0.02f, 1f))
                             .height(5.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(color.copy(alpha = 0.65f))
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(color)
                     )
                 }
             }
@@ -309,7 +433,7 @@ fun StatItem(label: String, amount: Double, color: Color, modifier: Modifier = M
             Modifier
                 .size(8.dp)
                 .clip(CircleShape)
-                .background(color.copy(alpha = 0.85f))
+                .background(color)
         )
         Spacer(Modifier.width(8.dp))
         Column {
@@ -325,4 +449,122 @@ fun StatItem(label: String, amount: Double, color: Color, modifier: Modifier = M
             )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddManualTransactionDialog(
+    categories: List<Pair<Long, String>>,
+    onConfirm: (bank: String, counterparty: String?, amount: Double, type: TxnType, note: String?, categoryId: Long?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var bank by remember { mutableStateOf("") }
+    var counterparty by remember { mutableStateOf("") }
+    var amountText by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    var isCredit by remember { mutableStateOf(false) }
+    var selectedCategoryId by remember { mutableStateOf<Long?>(null) }
+    var catMenuOpen by remember { mutableStateOf(false) }
+
+    val catName = categories.find { it.first == selectedCategoryId }?.second ?: "Uncategorized"
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add transaction") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = bank,
+                    onValueChange = { bank = it },
+                    label = { Text("Bank / source") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    counterparty,
+                    onValueChange = { counterparty = it },
+                    label = { Text("Counterparty (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { amountText = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text("Amount (PKR)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Type:", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.width(12.dp))
+                    Text("Expense", style = MaterialTheme.typography.bodyMedium)
+                    Switch(
+                        checked = isCredit,
+                        onCheckedChange = { isCredit = it }
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Income", style = MaterialTheme.typography.bodyMedium)
+                }
+                Spacer(Modifier.height(8.dp))
+                ExposedDropdownMenuBox(
+                    expanded = catMenuOpen,
+                    onExpandedChange = { catMenuOpen = it }
+                ) {
+                    OutlinedTextField(
+                        value = catName,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = catMenuOpen) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        label = { Text("Category") }
+                    )
+                    ExposedDropdownMenu(
+                        expanded = catMenuOpen,
+                        onDismissRequest = { catMenuOpen = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Uncategorized") },
+                            onClick = { selectedCategoryId = null; catMenuOpen = false }
+                        )
+                        categories.forEach { (id, name) ->
+                            DropdownMenuItem(
+                                text = { Text(name) },
+                                onClick = { selectedCategoryId = id; catMenuOpen = false }
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Note (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val amt = amountText.toDoubleOrNull() ?: return@TextButton
+                if (amt > 0 && bank.isNotBlank()) {
+                    onConfirm(
+                        bank.trim(),
+                        counterparty.trim().ifBlank { null },
+                        amt,
+                        if (isCredit) TxnType.CREDIT else TxnType.DEBIT,
+                        note.trim().ifBlank { null },
+                        selectedCategoryId
+                    )
+                }
+            }) { Text("Add") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
