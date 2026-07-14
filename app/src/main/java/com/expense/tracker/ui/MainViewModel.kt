@@ -10,23 +10,24 @@ import com.expense.tracker.data.db.CounterpartySummary
 import com.expense.tracker.data.db.TransactionEntity
 import com.expense.tracker.data.db.TxnType
 import com.expense.tracker.data.mail.ImapClient
+import com.expense.tracker.sync.SyncEngine
 import com.expense.tracker.sync.SyncScheduler
-import com.expense.tracker.sync.SyncWorker
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Calendar
 import java.util.concurrent.TimeUnit
 import javax.mail.AuthenticationFailedException
 
 enum class RangePreset(val label: String, val days: Int) {
-    WEEK("7 days", 7),
-    MONTH("30 days", 30),
-    ALL("60 days", 60)
+    TODAY("Today", 0),
+    WEEK("7d", 7),
+    MONTH("30d", 30),
+    ALL("60d", 60)
 }
 
 sealed interface SyncState {
@@ -54,8 +55,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
     val syncState: StateFlow<SyncState> = _syncState
 
-    private fun rangeStart(preset: RangePreset): Long =
-        System.currentTimeMillis() - TimeUnit.DAYS.toMillis(preset.days.toLong())
+    private fun rangeStart(preset: RangePreset): Long = when (preset) {
+        RangePreset.TODAY -> Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        else -> System.currentTimeMillis() - TimeUnit.DAYS.toMillis(preset.days.toLong())
+    }
 
     val bankSummaries: StateFlow<List<BankSummary>> = _range
         .flatMapLatest { dao.bankSummaries(rangeStart(it), Long.MAX_VALUE) }
@@ -70,15 +78,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val topReceivedFrom: StateFlow<List<CounterpartySummary>> = _range
-        .flatMapLatest { dao.topCounterparties(TxnType.CREDIT, rangeStart(it), Long.MAX_VALUE) }
+        .flatMapLatest { dao.topCounterparties(TxnType.CREDIT, rangeStart(it), Long.MAX_VALUE, limit = 5) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val topPaidTo: StateFlow<List<CounterpartySummary>> = _range
-        .flatMapLatest { dao.topCounterparties(TxnType.DEBIT, rangeStart(it), Long.MAX_VALUE) }
+        .flatMapLatest { dao.topCounterparties(TxnType.DEBIT, rangeStart(it), Long.MAX_VALUE, limit = 5) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val mostFrequentPaidTo: StateFlow<List<CounterpartySummary>> = _range
-        .flatMapLatest { dao.mostFrequentCounterparties(TxnType.DEBIT, rangeStart(it), Long.MAX_VALUE) }
+        .flatMapLatest { dao.mostFrequentCounterparties(TxnType.DEBIT, rangeStart(it), Long.MAX_VALUE, limit = 5) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setRange(preset: RangePreset) {
@@ -97,13 +105,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _syncState.value = SyncState.Syncing
             try {
-                val txns = ImapClient(cleanEmail, cleanPassword).fetchTransactions(SyncWorker.RETENTION_DAYS)
+                val txns = ImapClient(cleanEmail, cleanPassword)
+                    .fetchTransactions(SyncEngine.retentionCutoff())
                 dao.insertAll(txns)
-                dao.deleteOlderThan(SyncWorker.retentionCutoff())
+                dao.deleteOlderThan(SyncEngine.retentionCutoff())
                 settings.setCredentials(cleanEmail, cleanPassword)
                 SyncScheduler.schedulePeriodic(getApplication())
                 val now = System.currentTimeMillis()
                 settings.setLastSync(now)
+                settings.setSyncMarker(SyncEngine.SYNC_LOGIC_VERSION)
                 _syncState.value = SyncState.Success(txns.size, now)
             } catch (e: AuthenticationFailedException) {
                 _syncState.value = SyncState.Error(
@@ -131,16 +141,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_syncState.value is SyncState.Syncing) return
 
         viewModelScope.launch {
-            val email = settings.accountName.first() ?: return@launch
-            val password = settings.appPassword.first() ?: return@launch
             _syncState.value = SyncState.Syncing
             try {
-                val txns = ImapClient(email, password).fetchTransactions(SyncWorker.RETENTION_DAYS)
-                dao.insertAll(txns)
-                dao.deleteOlderThan(SyncWorker.retentionCutoff())
-                val now = System.currentTimeMillis()
-                settings.setLastSync(now)
-                _syncState.value = SyncState.Success(txns.size, now)
+                val count = SyncEngine.sync(getApplication()) ?: return@launch
+                _syncState.value = SyncState.Success(count, System.currentTimeMillis())
             } catch (e: Exception) {
                 _syncState.value = SyncState.Error(e.message ?: "Sync failed")
             }

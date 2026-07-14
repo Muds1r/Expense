@@ -4,11 +4,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.expense.tracker.data.db.CounterpartySummary
 import com.expense.tracker.ui.MainViewModel
@@ -23,6 +27,9 @@ fun InsightsScreen(viewModel: MainViewModel) {
     val mostFrequent by viewModel.mostFrequentPaidTo.collectAsState()
     val topTxns by viewModel.topTransactions.collectAsState()
 
+    val expanded = remember { mutableStateMapOf("in" to true) }
+    fun isOpen(key: String) = expanded[key] ?: false
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -30,29 +37,53 @@ fun InsightsScreen(viewModel: MainViewModel) {
     ) {
         item { RangeSelector(viewModel) }
 
-        item { SectionHeader("Top senders (money in)") }
-        if (topReceived.isEmpty()) item { EmptyState("Nothing here for this period.") }
-        leaderboard(topReceived, IncomeGreen, byCount = false, keyPrefix = "in")
+        item {
+            CollapsibleHeader("Top 5 senders (money in)", isOpen("in")) {
+                expanded["in"] = !isOpen("in")
+            }
+        }
+        if (isOpen("in")) {
+            if (topReceived.isEmpty()) item { EmptyState("Nothing here for this period.") }
+            leaderboard(topReceived, IncomeGreen, byCount = false, keyPrefix = "in")
+        }
 
-        item { SectionHeader("Top spends (money out)") }
-        if (topPaid.isEmpty()) item { EmptyState("Nothing here for this period.") }
-        leaderboard(topPaid, ExpenseRed, byCount = false, keyPrefix = "out")
+        item {
+            CollapsibleHeader("Top 5 spends (money out)", isOpen("out")) {
+                expanded["out"] = !isOpen("out")
+            }
+        }
+        if (isOpen("out")) {
+            if (topPaid.isEmpty()) item { EmptyState("Nothing here for this period.") }
+            leaderboard(topPaid, ExpenseRed, byCount = false, keyPrefix = "out")
+        }
 
-        item { SectionHeader("Most frequent payments") }
-        if (mostFrequent.isEmpty()) item { EmptyState("Nothing here for this period.") }
-        leaderboard(mostFrequent, ExpenseRed, byCount = true, keyPrefix = "freq")
+        item {
+            CollapsibleHeader("Most frequent payments", isOpen("freq")) {
+                expanded["freq"] = !isOpen("freq")
+            }
+        }
+        if (isOpen("freq")) {
+            if (mostFrequent.isEmpty()) item { EmptyState("Nothing here for this period.") }
+            leaderboard(mostFrequent, ExpenseRed, byCount = true, keyPrefix = "freq")
+        }
 
-        item { SectionHeader("Top 10 transactions") }
-        if (topTxns.isEmpty()) item { EmptyState("Nothing here for this period.") }
-        itemsIndexed(topTxns, key = { _, txn -> "top-" + txn.id }) { _, txn ->
-            TransactionRow(txn)
+        item {
+            CollapsibleHeader("Top 10 transactions", isOpen("top")) {
+                expanded["top"] = !isOpen("top")
+            }
+        }
+        if (isOpen("top")) {
+            if (topTxns.isEmpty()) item { EmptyState("Nothing here for this period.") }
+            itemsIndexed(topTxns, key = { _, txn -> "top-" + txn.id }) { _, txn ->
+                TransactionRow(txn)
+            }
         }
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.leaderboard(
+private fun LazyListScope.leaderboard(
     entries: List<CounterpartySummary>,
-    color: androidx.compose.ui.graphics.Color,
+    color: Color,
     byCount: Boolean,
     keyPrefix: String
 ) {
@@ -65,10 +96,12 @@ private fun androidx.compose.foundation.lazy.LazyListScope.leaderboard(
         entries,
         key = { _, e -> "$keyPrefix-${e.counterparty}" }
     ) { index, entry ->
+        val banks = entry.banks.replace(",", ", ")
         RankedRow(
             rank = index + 1,
             name = entry.counterparty,
             subtitle = "${entry.txnCount} transaction${if (entry.txnCount == 1) "" else "s"}" +
+                " · $banks" +
                 if (byCount) " · ${formatAmount(entry.total)} total" else "",
             valueText = if (byCount) "${entry.txnCount}×" else formatAmount(entry.total),
             fraction = if (byCount) {

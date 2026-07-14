@@ -3,7 +3,10 @@ package com.expense.tracker.data.mail
 import com.expense.tracker.data.db.TransactionEntity
 import com.expense.tracker.data.parser.BankRegistry
 import com.expense.tracker.data.parser.TransactionParser
+import com.sun.mail.iap.Argument
+import com.sun.mail.iap.ProtocolException
 import com.sun.mail.imap.IMAPFolder
+import com.sun.mail.imap.protocol.IMAPResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Date
@@ -30,7 +33,8 @@ import javax.mail.search.SearchTerm
  */
 class ImapClient(private val email: String, private val appPassword: String) {
 
-    suspend fun fetchTransactions(days: Int = 60): List<TransactionEntity> =
+    /** Fetch and parse all bank alert emails received after [sinceEpochMs]. */
+    suspend fun fetchTransactions(sinceEpochMs: Long): List<TransactionEntity> =
         withContext(Dispatchers.IO) {
             val props = Properties().apply {
                 put("mail.store.protocol", "imaps")
@@ -44,7 +48,7 @@ class ImapClient(private val email: String, private val appPassword: String) {
                 val folder = findAllMailFolder(store)
                 folder.open(Folder.READ_ONLY)
                 try {
-                    val messages = searchBankMessages(folder, days)
+                    val messages = searchBankMessages(folder, sinceEpochMs)
                     val profile = FetchProfile().apply {
                         add(FetchProfile.Item.ENVELOPE)
                         add("Message-ID")
@@ -72,16 +76,55 @@ class ImapClient(private val email: String, private val appPassword: String) {
     }
 
     /**
-     * Searches for bank emails in small chunks: one giant OR over ~48 domains
-     * makes Gmail's IMAP server silently drop matches, so we query a few
-     * domains at a time and de-duplicate. Every result is then re-checked
-     * client-side against the sender's domain (the parser only accepts
-     * addresses ending with @domain or a subdomain of it), so server-side
-     * over-matching is harmless.
+     * Prefer Gmail's X-GM-RAW search extension: it runs the exact same query
+     * syntax as the Gmail search box in one server-side call, which is both
+     * fast and reliable (IMAP OR terms are flaky on Gmail and silently drop
+     * senders). Falls back to chunked standard IMAP search if unavailable.
+     * Every result is re-checked client-side against the sender's domain by
+     * the parser, so server-side over-matching is harmless.
      */
-    private fun searchBankMessages(folder: Folder, days: Int): List<Message> {
-        val cutoff = Date(System.currentTimeMillis() - days * 86_400_000L)
-        val since: SearchTerm = ReceivedDateTerm(ComparisonTerm.GE, cutoff)
+    private fun searchBankMessages(folder: Folder, sinceEpochMs: Long): List<Message> {
+        if (folder is IMAPFolder) {
+            try {
+                return gmailRawSearch(folder, sinceEpochMs).toList()
+            } catch (e: Exception) {
+                // Not Gmail or extension rejected — use the standard path below.
+            }
+        }
+        return chunkedSearch(folder, sinceEpochMs)
+    }
+
+    private fun gmailRawSearch(folder: IMAPFolder, sinceEpochMs: Long): Array<Message> {
+        // Gmail accepts epoch seconds in after:, which avoids timezone issues.
+        val query = "from:(" + BankRegistry.domainToBank.keys.joinToString(" OR ") + ")" +
+            " after:" + sinceEpochMs / 1000
+
+        @Suppress("UNCHECKED_CAST")
+        val numbers = folder.doCommand { protocol ->
+            val args = Argument()
+            args.writeAtom("X-GM-RAW")
+            args.writeString(query)
+            val responses = protocol.command("SEARCH", args)
+            if (!responses.last().isOK) {
+                throw ProtocolException("X-GM-RAW SEARCH failed: " + responses.last())
+            }
+            val result = mutableListOf<Int>()
+            responses.forEach { r ->
+                if (r is IMAPResponse && r.keyEquals("SEARCH")) {
+                    // Untagged response looks like "* SEARCH 4 8 15 16".
+                    r.toString().split(' ').forEach { token ->
+                        token.toIntOrNull()?.let(result::add)
+                    }
+                }
+            }
+            result
+        } as List<Int>
+
+        return folder.getMessages(numbers.toIntArray())
+    }
+
+    private fun chunkedSearch(folder: Folder, sinceEpochMs: Long): List<Message> {
+        val since: SearchTerm = ReceivedDateTerm(ComparisonTerm.GE, Date(sinceEpochMs))
         val seen = mutableSetOf<Int>()
         val results = mutableListOf<Message>()
 

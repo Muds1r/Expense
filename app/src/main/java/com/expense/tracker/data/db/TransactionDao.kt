@@ -15,6 +15,8 @@ data class BankSummary(
 
 data class CounterpartySummary(
     val counterparty: String,
+    /** Comma-separated distinct banks this counterparty appeared on. */
+    val banks: String,
     val total: Double,
     val txnCount: Int
 )
@@ -49,7 +51,8 @@ interface TransactionDao {
 
     @Query(
         """
-        SELECT counterparty, SUM(amount) AS total, COUNT(*) AS txnCount
+        SELECT counterparty, GROUP_CONCAT(DISTINCT bank) AS banks,
+               SUM(amount) AS total, COUNT(*) AS txnCount
         FROM transactions
         WHERE type = :type AND counterparty IS NOT NULL AND timestamp BETWEEN :start AND :end
         GROUP BY counterparty
@@ -61,7 +64,8 @@ interface TransactionDao {
 
     @Query(
         """
-        SELECT counterparty, SUM(amount) AS total, COUNT(*) AS txnCount
+        SELECT counterparty, GROUP_CONCAT(DISTINCT bank) AS banks,
+               SUM(amount) AS total, COUNT(*) AS txnCount
         FROM transactions
         WHERE type = :type AND counterparty IS NOT NULL AND timestamp BETWEEN :start AND :end
         GROUP BY counterparty
