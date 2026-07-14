@@ -44,12 +44,12 @@ class ImapClient(private val email: String, private val appPassword: String) {
                 val folder = findAllMailFolder(store)
                 folder.open(Folder.READ_ONLY)
                 try {
-                    val messages = folder.search(buildSearchTerm(days))
+                    val messages = searchBankMessages(folder, days)
                     val profile = FetchProfile().apply {
                         add(FetchProfile.Item.ENVELOPE)
                         add("Message-ID")
                     }
-                    folder.fetch(messages, profile)
+                    folder.fetch(messages.toTypedArray(), profile)
                     messages.mapNotNull { parseMessage(it) }
                 } finally {
                     folder.close(false)
@@ -71,12 +71,28 @@ class ImapClient(private val email: String, private val appPassword: String) {
         return allMail ?: store.getFolder("INBOX")
     }
 
-    private fun buildSearchTerm(days: Int): SearchTerm {
+    /**
+     * Searches for bank emails in small chunks: one giant OR over ~48 domains
+     * makes Gmail's IMAP server silently drop matches, so we query a few
+     * domains at a time and de-duplicate. Every result is then re-checked
+     * client-side against the sender's domain (the parser only accepts
+     * addresses ending with @domain or a subdomain of it), so server-side
+     * over-matching is harmless.
+     */
+    private fun searchBankMessages(folder: Folder, days: Int): List<Message> {
         val cutoff = Date(System.currentTimeMillis() - days * 86_400_000L)
-        val fromTerms = BankRegistry.domainToBank.keys
-            .map { FromStringTerm(it) as SearchTerm }
-            .toTypedArray()
-        return AndTerm(ReceivedDateTerm(ComparisonTerm.GE, cutoff), OrTerm(fromTerms))
+        val since: SearchTerm = ReceivedDateTerm(ComparisonTerm.GE, cutoff)
+        val seen = mutableSetOf<Int>()
+        val results = mutableListOf<Message>()
+
+        BankRegistry.domainToBank.keys.chunked(6).forEach { domains ->
+            val fromTerms = domains.map { FromStringTerm(it) as SearchTerm }
+            val term = if (fromTerms.size == 1) fromTerms[0] else OrTerm(fromTerms.toTypedArray())
+            folder.search(AndTerm(since, term)).forEach { message ->
+                if (seen.add(message.messageNumber)) results.add(message)
+            }
+        }
+        return results
     }
 
     private fun parseMessage(message: Message): TransactionEntity? {

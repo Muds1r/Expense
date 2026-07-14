@@ -13,15 +13,16 @@ import com.expense.tracker.data.db.TxnType
 object TransactionParser {
 
     private val amountRegex = Regex(
-        """(?:Rs\.?|PKR|₨)\s*([\d,]+(?:\.\d{1,2})?)""",
+        """(?:Rs\.?|PKR\.?|₨)\s*:?\s*([\d,]+(?:\.\d{1,2})?)""",
         RegexOption.IGNORE_CASE
     )
 
     private val debitKeywords = listOf(
-        "debited", "spent", "sent", "withdrawn", "paid", "purchase", "payment of", "debit"
+        "debited", "spent", "sent", "withdrawn", "withdrawal", "paid", "purchase",
+        "payment of", "transferred to", "debit"
     )
     private val creditKeywords = listOf(
-        "credited", "received", "deposited", "credit"
+        "credited", "received", "deposited", "deposit", "transferred from", "credit"
     )
 
     private val accountRegex = Regex(
