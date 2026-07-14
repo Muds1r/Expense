@@ -85,6 +85,9 @@ interface TransactionDao {
     )
     fun topTransactions(start: Long, end: Long, limit: Int = 10): Flow<List<TransactionEntity>>
 
+    @Query("SELECT * FROM transactions WHERE id = :id")
+    fun observeTransaction(id: String): Flow<TransactionEntity?>
+
     @Query("SELECT COUNT(*) FROM transactions")
     fun count(): Flow<Int>
 }

@@ -21,7 +21,7 @@ import com.expense.tracker.ui.theme.ExpenseRed
 import com.expense.tracker.ui.theme.IncomeGreen
 
 @Composable
-fun InsightsScreen(viewModel: MainViewModel) {
+fun InsightsScreen(viewModel: MainViewModel, onTransactionClick: (String) -> Unit) {
     val topReceived by viewModel.topReceivedFrom.collectAsState()
     val topPaid by viewModel.topPaidTo.collectAsState()
     val mostFrequent by viewModel.mostFrequentPaidTo.collectAsState()
@@ -75,7 +75,7 @@ fun InsightsScreen(viewModel: MainViewModel) {
         if (isOpen("top")) {
             if (topTxns.isEmpty()) item { EmptyState("Nothing here for this period.") }
             itemsIndexed(topTxns, key = { _, txn -> "top-" + txn.id }) { _, txn ->
-                TransactionRow(txn)
+                TransactionRow(txn, onClick = { onTransactionClick(txn.id) })
             }
         }
     }

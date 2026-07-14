@@ -33,6 +33,21 @@ import javax.mail.search.SearchTerm
  */
 class ImapClient(private val email: String, private val appPassword: String) {
 
+    /**
+     * Quick credential check: connects and opens the mailbox, nothing more.
+     * Throws AuthenticationFailedException on a bad email/app password.
+     */
+    suspend fun verifyLogin(): Unit = withContext(Dispatchers.IO) {
+        val store = Session.getInstance(Properties().apply {
+            put("mail.store.protocol", "imaps")
+            put("mail.imaps.ssl.enable", "true")
+            put("mail.imaps.connectiontimeout", "20000")
+            put("mail.imaps.timeout", "30000")
+        }).getStore("imaps")
+        store.connect("imap.gmail.com", 993, email, appPassword)
+        store.close()
+    }
+
     /** Fetch and parse all bank alert emails received after [sinceEpochMs]. */
     suspend fun fetchTransactions(sinceEpochMs: Long): List<TransactionEntity> =
         withContext(Dispatchers.IO) {

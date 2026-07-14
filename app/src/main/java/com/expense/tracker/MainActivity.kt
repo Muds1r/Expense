@@ -1,5 +1,6 @@
 package com.expense.tracker
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Dashboard
@@ -40,15 +42,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.expense.tracker.ui.MainViewModel
 import com.expense.tracker.ui.SyncState
 import com.expense.tracker.ui.screens.DashboardScreen
 import com.expense.tracker.ui.screens.InsightsScreen
 import com.expense.tracker.ui.screens.SetupScreen
+import com.expense.tracker.ui.screens.TransactionDetailScreen
 import com.expense.tracker.ui.screens.TransactionsScreen
 import com.expense.tracker.ui.theme.ExpenseTrackerTheme
 
@@ -100,70 +105,90 @@ private fun App() {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    val isDetail = currentRoute?.startsWith("transaction/") == true
+
+    val onTransactionClick: (String) -> Unit = { id ->
+        navController.navigate("transaction/${Uri.encode(id)}")
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    if (isDetail) {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                },
                 title = {
-                    Column {
-                        Text(
-                            "Expense Tracker",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            accountName ?: "",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    if (isDetail) {
+                        Text("Transaction", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    } else {
+                        Column {
+                            Text(
+                                "Expense Tracker",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                accountName ?: "",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 },
                 actions = {
-                    if (syncState is SyncState.Syncing) {
-                        CircularProgressIndicator(Modifier.padding(12.dp).height(24.dp))
-                    } else {
-                        IconButton(onClick = { viewModel.syncNow() }) {
-                            Icon(Icons.Default.Sync, contentDescription = "Sync now")
+                    if (!isDetail) {
+                        if (syncState is SyncState.Syncing) {
+                            CircularProgressIndicator(Modifier.padding(12.dp).height(24.dp))
+                        } else {
+                            IconButton(onClick = { viewModel.syncNow() }) {
+                                Icon(Icons.Default.Sync, contentDescription = "Sync now")
+                            }
                         }
-                    }
-                    IconButton(onClick = { viewModel.signOut() }) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
+                        IconButton(onClick = { viewModel.signOut() }) {
+                            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
+                        }
                     }
                 }
             )
         },
         bottomBar = {
-            Column {
-                NavigationBar(windowInsets = WindowInsets(0)) {
-                    tabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = currentRoute == tab.route,
-                            onClick = {
-                                navController.navigate(tab.route) {
-                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label) }
-                        )
+            if (!isDetail) {
+                Column {
+                    NavigationBar(windowInsets = WindowInsets(0)) {
+                        tabs.forEach { tab ->
+                            NavigationBarItem(
+                                selected = currentRoute == tab.route,
+                                onClick = {
+                                    navController.navigate(tab.route) {
+                                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                },
+                                icon = { Icon(tab.icon, contentDescription = tab.label) },
+                                label = { Text(tab.label) }
+                            )
+                        }
                     }
+                    Text(
+                        "Made By Muds1r",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.surfaceContainer)
+                            .navigationBarsPadding()
+                            .padding(bottom = 4.dp)
+                    )
                 }
-                Text(
-                    "Made By Muds1r",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainer)
-                        .navigationBarsPadding()
-                        .padding(bottom = 4.dp)
-                )
             }
         }
     ) { padding ->
@@ -173,8 +198,15 @@ private fun App() {
             modifier = Modifier.padding(padding)
         ) {
             composable("dashboard") { DashboardScreen(viewModel) }
-            composable("transactions") { TransactionsScreen(viewModel) }
-            composable("insights") { InsightsScreen(viewModel) }
+            composable("transactions") { TransactionsScreen(viewModel, onTransactionClick) }
+            composable("insights") { InsightsScreen(viewModel, onTransactionClick) }
+            composable(
+                route = "transaction/{txnId}",
+                arguments = listOf(navArgument("txnId") { type = NavType.StringType })
+            ) { entry ->
+                val id = Uri.decode(entry.arguments?.getString("txnId").orEmpty())
+                TransactionDetailScreen(viewModel, id)
+            }
         }
     }
 }

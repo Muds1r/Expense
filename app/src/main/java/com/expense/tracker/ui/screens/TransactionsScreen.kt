@@ -18,7 +18,7 @@ import com.expense.tracker.ui.MainViewModel
 import com.expense.tracker.ui.dayLabel
 
 @Composable
-fun TransactionsScreen(viewModel: MainViewModel) {
+fun TransactionsScreen(viewModel: MainViewModel, onTransactionClick: (String) -> Unit) {
     val transactions by viewModel.transactions.collectAsState()
     val grouped = transactions.groupBy { dayLabel(it.timestamp) }
 
@@ -43,7 +43,9 @@ fun TransactionsScreen(viewModel: MainViewModel) {
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
-            items(txns, key = { it.id }) { txn -> TransactionRow(txn) }
+            items(txns, key = { it.id }) { txn ->
+                TransactionRow(txn, onClick = { onTransactionClick(txn.id) })
+            }
         }
     }
 }

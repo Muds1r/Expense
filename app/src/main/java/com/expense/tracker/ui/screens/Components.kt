@@ -147,10 +147,14 @@ fun InitialAvatar(name: String, tint: Color, size: Int = 42) {
 }
 
 @Composable
-fun TransactionRow(txn: TransactionEntity, showDate: Boolean = true) {
+fun TransactionRow(txn: TransactionEntity, showDate: Boolean = true, onClick: (() -> Unit)? = null) {
     val isCredit = txn.type == TxnType.CREDIT
     val color = if (isCredit) IncomeGreen else ExpenseRed
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+    ) {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically

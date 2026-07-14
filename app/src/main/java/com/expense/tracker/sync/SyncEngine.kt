@@ -35,15 +35,18 @@ object SyncEngine {
 
     /**
      * Runs a sync with stored credentials and applies the 60-day retention.
+     * @param forceFull when true, re-fetches the entire 60-day window (used on
+     * first connect and after parser/search logic changes).
      * @return the number of fetched transactions, or null if not signed in.
      */
-    suspend fun sync(context: Context): Int? {
+    suspend fun sync(context: Context, forceFull: Boolean = false): Int? {
         val settings = SettingsStore(context)
         val email = settings.accountName.first() ?: return null
         val password = settings.appPassword.first() ?: return null
         val dao = AppDatabase.get(context).transactionDao()
 
-        val transactions = ImapClient(email, password).fetchTransactions(sinceFor(settings))
+        val since = if (forceFull) retentionCutoff() else sinceFor(settings)
+        val transactions = ImapClient(email, password).fetchTransactions(since)
         dao.insertAll(transactions)
         dao.deleteOlderThan(retentionCutoff())
         settings.setLastSync(System.currentTimeMillis())

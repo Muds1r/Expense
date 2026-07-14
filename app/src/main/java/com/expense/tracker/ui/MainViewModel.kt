@@ -3,6 +3,7 @@ package com.expense.tracker.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
 import com.expense.tracker.data.SettingsStore
 import com.expense.tracker.data.db.AppDatabase
 import com.expense.tracker.data.db.BankSummary
@@ -12,16 +13,17 @@ import com.expense.tracker.data.db.TxnType
 import com.expense.tracker.data.mail.ImapClient
 import com.expense.tracker.sync.SyncEngine
 import com.expense.tracker.sync.SyncScheduler
+import com.expense.tracker.sync.SyncWorker
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
-import javax.mail.AuthenticationFailedException
 
 enum class RangePreset(val label: String, val days: Int) {
     TODAY("Today", 0),
@@ -54,6 +56,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _syncState = MutableStateFlow<SyncState>(SyncState.Idle)
     val syncState: StateFlow<SyncState> = _syncState
+
+    init {
+        viewModelScope.launch {
+            SyncScheduler.manualSyncFlow(getApplication()).collect { infos ->
+                val info = infos.firstOrNull() ?: return@collect
+                when (info.state) {
+                    WorkInfo.State.ENQUEUED, WorkInfo.State.RUNNING, WorkInfo.State.BLOCKED ->
+                        _syncState.value = SyncState.Syncing
+                    WorkInfo.State.SUCCEEDED -> {
+                        val count = info.outputData.getInt(SyncWorker.KEY_COUNT, 0)
+                        val at = info.outputData.getLong(SyncWorker.KEY_AT, System.currentTimeMillis())
+                        _syncState.value = SyncState.Success(count, at)
+                    }
+                    WorkInfo.State.FAILED -> {
+                        val err = info.outputData.getString(SyncWorker.KEY_ERROR) ?: "Sync failed"
+                        // First connect saves credentials before sync finishes — roll back on failure.
+                        if (settings.lastSync.first() == null) {
+                            settings.clear()
+                            SyncScheduler.cancel(getApplication())
+                        }
+                        _syncState.value = SyncState.Error(err)
+                    }
+                    WorkInfo.State.CANCELLED -> _syncState.value = SyncState.Idle
+                }
+            }
+        }
+    }
 
     private fun rangeStart(preset: RangePreset): Long = when (preset) {
         RangePreset.TODAY -> Calendar.getInstance().apply {
@@ -89,42 +118,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .flatMapLatest { dao.mostFrequentCounterparties(TxnType.DEBIT, rangeStart(it), Long.MAX_VALUE, limit = 5) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    fun transaction(id: String): StateFlow<TransactionEntity?> =
+        dao.observeTransaction(id)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     fun setRange(preset: RangePreset) {
         _range.value = preset
     }
 
     /**
-     * First-time setup: verify the credentials by doing a full sync, and only
-     * store them (and schedule background sync) if the login succeeds.
+     * First-time setup: save credentials, then run a full sync through WorkManager
+     * so the long initial fetch survives a locked screen.
      */
     fun connect(email: String, appPassword: String) {
         if (_syncState.value is SyncState.Syncing) return
         val cleanEmail = email.trim()
         val cleanPassword = ImapClient.cleanAppPassword(appPassword)
+        if (cleanEmail.isBlank() || cleanPassword.isBlank()) return
 
         viewModelScope.launch {
-            _syncState.value = SyncState.Syncing
-            try {
-                val txns = ImapClient(cleanEmail, cleanPassword)
-                    .fetchTransactions(SyncEngine.retentionCutoff())
-                dao.insertAll(txns)
-                dao.deleteOlderThan(SyncEngine.retentionCutoff())
-                settings.setCredentials(cleanEmail, cleanPassword)
-                SyncScheduler.schedulePeriodic(getApplication())
-                val now = System.currentTimeMillis()
-                settings.setLastSync(now)
-                settings.setSyncMarker(SyncEngine.SYNC_LOGIC_VERSION)
-                _syncState.value = SyncState.Success(txns.size, now)
-            } catch (e: AuthenticationFailedException) {
-                _syncState.value = SyncState.Error(
-                    "Gmail rejected the login. Check that the email is correct and that " +
-                        "you pasted a valid App Password (not your normal password). " +
-                        "Create one at myaccount.google.com/apppasswords — it requires " +
-                        "2-Step Verification to be enabled."
-                )
-            } catch (e: Exception) {
-                _syncState.value = SyncState.Error(e.message ?: "Connection failed")
-            }
+            settings.setCredentials(cleanEmail, cleanPassword)
+            SyncScheduler.schedulePeriodic(getApplication())
+            SyncScheduler.enqueueManual(getApplication(), forceFull = true)
         }
     }
 
@@ -137,17 +152,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Enqueues an expedited WorkManager job — keeps running with screen locked. */
     fun syncNow() {
         if (_syncState.value is SyncState.Syncing) return
-
-        viewModelScope.launch {
-            _syncState.value = SyncState.Syncing
-            try {
-                val count = SyncEngine.sync(getApplication()) ?: return@launch
-                _syncState.value = SyncState.Success(count, System.currentTimeMillis())
-            } catch (e: Exception) {
-                _syncState.value = SyncState.Error(e.message ?: "Sync failed")
-            }
-        }
+        SyncScheduler.enqueueManual(getApplication(), forceFull = false)
     }
 }
