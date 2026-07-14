@@ -15,8 +15,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -58,13 +56,13 @@ fun SetupScreen(
                 Icons.Default.AccountBalance,
                 contentDescription = null,
                 modifier = Modifier.height(64.dp),
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
             )
             Spacer(Modifier.height(24.dp))
             Text(
                 "Expense Tracker",
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(12.dp))
             Text(
@@ -77,7 +75,7 @@ fun SetupScreen(
             )
             Spacer(Modifier.height(24.dp))
 
-            Card {
+            SoftCard(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     "One-time setup:\n" +
                         "1. Enable 2-Step Verification on your Google account (if not already on).\n" +
@@ -85,7 +83,8 @@ fun SetupScreen(
                         "3. Create an app password named \"Expense Tracker\".\n" +
                         "4. Enter your Gmail and that 16-character password below.",
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Spacer(Modifier.height(24.dp))
@@ -129,15 +128,11 @@ fun SetupScreen(
 
             if (errorMessage != null && !isConnecting) {
                 Spacer(Modifier.height(24.dp))
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
+                SoftCard(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         errorMessage,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(16.dp)
                     )
                 }
@@ -147,7 +142,7 @@ fun SetupScreen(
         Text(
             "Made By Muds1r",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 16.dp)

@@ -1,6 +1,6 @@
 package com.expense.tracker.ui.screens
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,22 +11,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -71,9 +66,9 @@ fun CategoriesScreen(
         item { RangeSelector(viewModel) }
 
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
+            SoftHeroCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Budget by category", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Budget by category", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
                     Row {
                         StatItem("Received", totalIn, IncomeGreen, Modifier.weight(1f))
@@ -102,7 +97,7 @@ fun CategoriesScreen(
                 Text(
                     "Categories",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f)
                 )
                 TextButton(onClick = { showAdd = true }) {
@@ -128,16 +123,15 @@ fun CategoriesScreen(
             Text(
                 "Manage categories",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(top = 8.dp)
             )
         }
 
         items(categories, key = { it.id }) { cat ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onCategoryClick(cat.id) }
+            SoftCard(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onCategoryClick(cat.id) }
             ) {
                 Row(
                     Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -210,11 +204,7 @@ fun CategoriesScreen(
 private fun CategoryBudgetCard(summary: CategorySummary, onClick: () -> Unit) {
     val net = summary.totalIn - summary.totalOut
     val budget = summary.budgetAmount
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-    ) {
+    SoftCard(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -234,7 +224,7 @@ private fun CategoryBudgetCard(summary: CategorySummary, onClick: () -> Unit) {
                 BudgetProgressBar(spent = summary.totalOut, budget = budget)
             }
             Spacer(Modifier.height(10.dp))
-            HorizontalDivider()
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(10.dp))
             Row {
                 AmountCol("In", summary.totalIn, IncomeGreen, Modifier.weight(1f))

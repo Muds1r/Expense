@@ -15,8 +15,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -76,18 +74,14 @@ fun CategoryDetailScreen(
         item { RangeSelector(viewModel) }
 
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-            ) {
+            SoftHeroCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             name,
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.weight(1f),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
                         )
                         if (categoryId != null) {
                             IconButton(onClick = {
@@ -96,11 +90,7 @@ fun CategoryDetailScreen(
                                 } ?: ""
                                 showBudgetDialog = true
                             }) {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "Set budget",
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
+                                Icon(Icons.Default.Edit, contentDescription = "Set budget")
                             }
                         }
                     }
@@ -124,7 +114,7 @@ fun CategoryDetailScreen(
                             Text(
                                 "No budget set — tap the edit icon to add one.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -136,7 +126,7 @@ fun CategoryDetailScreen(
             Text(
                 "Transactions (${txns.size})",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.SemiBold
             )
         }
 
