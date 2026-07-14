@@ -19,8 +19,8 @@ import com.expense.tracker.ui.dayLabel
 
 @Composable
 fun TransactionsScreen(viewModel: MainViewModel, onTransactionClick: (String) -> Unit) {
-    val transactions by viewModel.transactions.collectAsState()
-    val grouped = transactions.groupBy { dayLabel(it.timestamp) }
+    val allTransactions by viewModel.allTransactions.collectAsState()
+    val grouped = allTransactions.groupBy { dayLabel(it.timestamp) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -29,7 +29,7 @@ fun TransactionsScreen(viewModel: MainViewModel, onTransactionClick: (String) ->
     ) {
         item { RangeSelector(viewModel) }
 
-        if (transactions.isEmpty()) {
+        if (allTransactions.isEmpty()) {
             item { EmptyState("No transactions in this period.") }
         }
 
@@ -38,7 +38,7 @@ fun TransactionsScreen(viewModel: MainViewModel, onTransactionClick: (String) ->
                 Text(
                     day,
                     style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 8.dp)
                 )

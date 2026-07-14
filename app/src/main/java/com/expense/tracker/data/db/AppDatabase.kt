@@ -21,8 +21,8 @@ class Converters {
 }
 
 @Database(
-    entities = [TransactionEntity::class, CategoryEntity::class],
-    version = 3,
+    entities = [TransactionEntity::class, CategoryEntity::class, SplitEntity::class],
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -54,8 +54,30 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE transactions ADD COLUMN note TEXT")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN isManual INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE transactions ADD COLUMN isTransfer INTEGER NOT NULL DEFAULT 0")
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS transaction_splits (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        parentTxnId TEXT NOT NULL,
+                        amount REAL NOT NULL,
+                        categoryId INTEGER,
+                        note TEXT,
+                        FOREIGN KEY (parentTxnId) REFERENCES transactions(id) ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_transaction_splits_parentTxnId ON transaction_splits(parentTxnId)")
+            }
+        }
+
         private val DEFAULT_CATEGORIES = listOf(
-            "Food", "Transport", "Bills", "Shopping", "Family", "Transfer", "Other"
+            "Food", "Transport", "Bills", "Shopping", "Family", "Transfer", "Savings", "Cash", "Other"
         )
 
         fun get(context: Context): AppDatabase =
@@ -65,7 +87,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "expense-tracker.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { database ->
                         instance = database

@@ -34,6 +34,8 @@ data class CategorySummary(
 @Dao
 interface TransactionDao {
 
+    // ─── Synced transactions ───────────────────────────────────────────
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertIgnore(transactions: List<TransactionEntity>)
 
@@ -55,9 +57,6 @@ interface TransactionDao {
         subject: String
     )
 
-    /**
-     * Upsert parsed mail without wiping the user's [categoryId] on existing rows.
-     */
     @Transaction
     suspend fun upsertParsed(transactions: List<TransactionEntity>) {
         insertIgnore(transactions)
@@ -75,14 +74,75 @@ interface TransactionDao {
         }
     }
 
+    // ─── Category assignment ───────────────────────────────────────────
+
     @Query("UPDATE transactions SET categoryId = :categoryId WHERE id = :id")
     suspend fun setCategory(id: String, categoryId: Long?)
 
     @Query("DELETE FROM transactions WHERE timestamp < :cutoff")
     suspend fun deleteOlderThan(cutoff: Long)
 
-    @Query("SELECT * FROM transactions WHERE timestamp BETWEEN :start AND :end ORDER BY timestamp DESC")
+    // ─── Note ──────────────────────────────────────────────────────────
+
+    @Query("UPDATE transactions SET note = :note WHERE id = :id")
+    suspend fun setNote(id: String, note: String?)
+
+    // ─── Transfer toggle ───────────────────────────────────────────────
+
+    @Query("UPDATE transactions SET isTransfer = :isTransfer WHERE id = :id")
+    suspend fun setTransfer(id: String, isTransfer: Boolean)
+
+    // ─── Manual transactions ───────────────────────────────────────────
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTransaction(txn: TransactionEntity): Long
+
+    @Query("DELETE FROM transactions WHERE id = :id AND isManual = 1")
+    suspend fun deleteManualTransaction(id: String)
+
+    // ─── Splits ────────────────────────────────────────────────────────
+
+    @Insert
+    suspend fun insertSplit(split: SplitEntity): Long
+
+    @Query("DELETE FROM transaction_splits WHERE id = :splitId")
+    suspend fun deleteSplit(splitId: Long)
+
+    @Query("DELETE FROM transaction_splits WHERE parentTxnId = :txnId")
+    suspend fun deleteSplitsForTransaction(txnId: String)
+
+    @Query("SELECT * FROM transaction_splits WHERE parentTxnId = :txnId ORDER BY id ASC")
+    fun splitsForTransaction(txnId: String): Flow<List<SplitEntity>>
+
+    @Query("SELECT * FROM transaction_splits WHERE parentTxnId = :txnId ORDER BY id ASC")
+    suspend fun getSplitsForTransaction(txnId: String): List<SplitEntity>
+
+    @Query("SELECT * FROM transaction_splits WHERE id = :id")
+    suspend fun getSplit(id: Long): SplitEntity?
+
+    @Query("UPDATE transaction_splits SET amount = :amount, categoryId = :categoryId, note = :note WHERE id = :id")
+    suspend fun updateSplit(id: Long, amount: Double, categoryId: Long?, note: String?)
+
+    // ─── Queries: in-range transactions (exclude transfers in summaries) ──
+
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE timestamp BETWEEN :start AND :end AND isTransfer = 0
+        ORDER BY timestamp DESC
+        """
+    )
     fun transactionsInRange(start: Long, end: Long): Flow<List<TransactionEntity>>
+
+    /** All transactions including transfers (for the transactions tab list). */
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE timestamp BETWEEN :start AND :end
+        ORDER BY timestamp DESC
+        """
+    )
+    fun allTransactionsInRange(start: Long, end: Long): Flow<List<TransactionEntity>>
 
     @Query("SELECT * FROM transactions WHERE id = :id")
     fun observeTransaction(id: String): Flow<TransactionEntity?>
@@ -94,7 +154,7 @@ interface TransactionDao {
                SUM(CASE WHEN type = 'DEBIT' THEN amount ELSE 0 END) AS totalOut,
                COUNT(*) AS txnCount
         FROM transactions
-        WHERE timestamp BETWEEN :start AND :end
+        WHERE timestamp BETWEEN :start AND :end AND isTransfer = 0
         GROUP BY bank
         ORDER BY totalOut DESC
         """
@@ -107,6 +167,7 @@ interface TransactionDao {
                SUM(amount) AS total, COUNT(*) AS txnCount
         FROM transactions
         WHERE type = :type AND counterparty IS NOT NULL AND timestamp BETWEEN :start AND :end
+          AND isTransfer = 0
         GROUP BY counterparty
         ORDER BY total DESC
         LIMIT :limit
@@ -120,6 +181,7 @@ interface TransactionDao {
                SUM(amount) AS total, COUNT(*) AS txnCount
         FROM transactions
         WHERE type = :type AND counterparty IS NOT NULL AND timestamp BETWEEN :start AND :end
+          AND isTransfer = 0
         GROUP BY counterparty
         ORDER BY txnCount DESC
         LIMIT :limit
@@ -130,7 +192,7 @@ interface TransactionDao {
     @Query(
         """
         SELECT * FROM transactions
-        WHERE timestamp BETWEEN :start AND :end
+        WHERE timestamp BETWEEN :start AND :end AND isTransfer = 0
         ORDER BY amount DESC
         LIMIT :limit
         """
@@ -147,7 +209,7 @@ interface TransactionDao {
                c.budgetAmount AS budgetAmount
         FROM transactions t
         LEFT JOIN categories c ON c.id = t.categoryId
-        WHERE t.timestamp BETWEEN :start AND :end
+        WHERE t.timestamp BETWEEN :start AND :end AND t.isTransfer = 0
         GROUP BY t.categoryId, categoryName, c.budgetAmount
         ORDER BY totalOut DESC, totalIn DESC
         """
@@ -163,6 +225,8 @@ interface TransactionDao {
         """
     )
     fun transactionsForCategory(categoryId: Long?, start: Long, end: Long): Flow<List<TransactionEntity>>
+
+    // ─── Category management ───────────────────────────────────────────
 
     @Query("SELECT * FROM categories WHERE id = :id")
     fun observeCategory(id: Long): Flow<CategoryEntity?>

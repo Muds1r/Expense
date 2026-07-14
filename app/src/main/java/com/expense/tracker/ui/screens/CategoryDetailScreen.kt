@@ -112,7 +112,7 @@ fun CategoryDetailScreen(
                             BudgetProgressBar(spent = totalOut, budget = budget)
                         } else {
                             Text(
-                                "No budget set — tap the edit icon to add one.",
+                                "No budget set \u2014 tap the edit icon to add one.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

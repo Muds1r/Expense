@@ -57,6 +57,8 @@ fun CategoriesScreen(
 
     val totalIn = summaries.sumOf { it.totalIn }
     val totalOut = summaries.sumOf { it.totalOut }
+    val totalBudget = summaries.mapNotNull { it.budgetAmount }.sum()
+    val net = totalIn - totalOut
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -68,25 +70,31 @@ fun CategoriesScreen(
         item {
             SoftHeroCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Budget by category", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(8.dp))
+                    Text("Budget overview", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(12.dp))
+
                     Row {
                         StatItem("Received", totalIn, IncomeGreen, Modifier.weight(1f))
                         StatItem("Spent", totalOut, ExpenseRed, Modifier.weight(1f))
                     }
                     Spacer(Modifier.height(8.dp))
-                    val net = totalIn - totalOut
-                    Text(
-                        "Net  " + (if (net >= 0) "+" else "") + formatAmount(net),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (net >= 0) IncomeGreen else ExpenseRed
-                    )
+                    Row {
+                        StatItem("Net", net, if (net >= 0) IncomeGreen else ExpenseRed, Modifier.weight(1f))
+                        if (totalBudget > 0) {
+                            StatItem("Total budget", totalBudget, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                        }
+                    }
+
+                    if (totalBudget > 0) {
+                        Spacer(Modifier.height(12.dp))
+                        BudgetProgressBar(spent = totalOut, budget = totalBudget)
+                    }
+
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         "Tap a category to see its transactions and set a budget.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -186,7 +194,7 @@ fun CategoriesScreen(
         AlertDialog(
             onDismissRequest = { pendingDeleteId = null },
             title = { Text("Delete category?") },
-            text = { Text("\"$name\" will be removed. Transactions in it become Uncategorized.") },
+            text = { Text("\"\$name\" will be removed. Transactions in it become Uncategorized.") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteCategory(id)
@@ -261,14 +269,14 @@ fun BudgetProgressBar(spent: Double, budget: Double) {
                 .fillMaxWidth()
                 .height(8.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
         ) {
             Box(
                 Modifier
                     .fillMaxWidth(fraction.coerceAtLeast(0.02f))
                     .height(8.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(barColor.copy(alpha = 0.85f))
+                    .background(barColor)
             )
         }
         if (over) {

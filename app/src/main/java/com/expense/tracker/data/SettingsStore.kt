@@ -18,11 +18,16 @@ class SettingsStore(private val context: Context) {
     private val appPasswordKey = stringPreferencesKey("app_password")
     private val lastSyncKey = longPreferencesKey("last_sync")
     private val syncMarkerKey = intPreferencesKey("sync_logic_version")
+    private val customRangeStartKey = longPreferencesKey("custom_range_start")
+    private val customRangeEndKey = longPreferencesKey("custom_range_end")
 
     val accountName: Flow<String?> = context.dataStore.data.map { it[accountKey] }
     val appPassword: Flow<String?> = context.dataStore.data.map { it[appPasswordKey] }
     val lastSync: Flow<Long?> = context.dataStore.data.map { it[lastSyncKey] }
     val syncMarker: Flow<Int?> = context.dataStore.data.map { it[syncMarkerKey] }
+
+    val customRangeStart: Flow<Long?> = context.dataStore.data.map { it[customRangeStartKey] }
+    val customRangeEnd: Flow<Long?> = context.dataStore.data.map { it[customRangeEndKey] }
 
     suspend fun setCredentials(email: String, appPassword: String) {
         context.dataStore.edit {
@@ -37,6 +42,20 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setSyncMarker(version: Int) {
         context.dataStore.edit { it[syncMarkerKey] = version }
+    }
+
+    suspend fun setCustomRange(start: Long, end: Long) {
+        context.dataStore.edit {
+            it[customRangeStartKey] = start
+            it[customRangeEndKey] = end
+        }
+    }
+
+    suspend fun getCustomRange(): Pair<Long, Long>? {
+        val data = context.dataStore.data.first()
+        val start = data[customRangeStartKey]
+        val end = data[customRangeEndKey]
+        return if (start != null && end != null) start to end else null
     }
 
     suspend fun budgetAlertLevel(categoryId: Long, periodKey: String): Int {
