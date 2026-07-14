@@ -12,29 +12,19 @@ and shows you where your money goes.
   the app's database automatically on every sync. Your Gmail is never touched.
 - Everything stays on your phone. No server, no analytics, no third parties.
 
-## One-time Google Cloud setup (required before first run)
+## One-time setup (2 minutes, no Google Cloud needed)
 
-The app talks to the Gmail API, so you need a (free) Google Cloud project:
+The app reads Gmail over IMAP using a Google **App Password** — no OAuth, no
+Google Cloud project, no consent screens, and nothing that expires:
 
-1. Go to [console.cloud.google.com](https://console.cloud.google.com) and create
-   a new project (e.g. "Expense Tracker").
-2. **Enable the Gmail API**: APIs & Services → Library → search "Gmail API" → Enable.
-3. **OAuth consent screen**: APIs & Services → OAuth consent screen
-   - User type: **External**, then fill in the app name and your email.
-   - Under **Test users**, add your own Gmail address. (As a test user you can
-     use the app indefinitely without any Google verification.)
-4. **Create the Android OAuth client**: APIs & Services → Credentials →
-   Create Credentials → OAuth client ID
-   - Application type: **Android**
-   - Package name: `com.expense.tracker`
-   - SHA-1: run this and paste the debug SHA-1:
+1. Enable **2-Step Verification** on your Google account (if not already on):
+   [myaccount.google.com/security](https://myaccount.google.com/security)
+2. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
+   and create an app password named "Expense Tracker".
+3. Open the app and enter your Gmail address plus that 16-character password.
 
-     ```bash
-     keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android | grep SHA1
-     ```
-
-   No file needs to be downloaded or added to the project — Google matches your
-   app by package name + SHA-1 automatically.
+The app password works until you revoke it from the same page. The app opens
+the mailbox in read-only mode, so it cannot modify or delete anything.
 
 ## Build & install
 
@@ -43,9 +33,6 @@ Open the project in Android Studio and press Run, or from the command line:
 ```bash
 ./gradlew :app:installDebug
 ```
-
-On first launch, sign in with the same Google account you added as a test user
-and approve the Gmail read-only permission. Then tap the sync icon.
 
 ## Adding your banks
 
@@ -59,10 +46,12 @@ regex patterns are in `data/parser/TransactionParser.kt`.
 ## How it works
 
 - **Sync**: on demand (sync button) and automatically every 6 hours via
-  WorkManager. Each sync queries Gmail for `from:(<bank domains>) newer_than:60d`,
-  parses each email, and inserts new transactions (duplicates are impossible —
-  the Gmail message ID is the primary key).
+  WorkManager. Each sync connects to `imap.gmail.com` and searches All Mail for
+  messages from known bank domains received in the last 60 days, parses each
+  email, and inserts new transactions (duplicates are impossible — the email's
+  Message-ID is the primary key).
 - **Retention**: after each sync, local rows older than 60 days are deleted.
-- **Storage**: Room (SQLite) database on-device.
-- **Scope**: only `gmail.readonly` is requested, so the app is technically
-  incapable of changing anything in your Gmail account.
+- **Storage**: Room (SQLite) database on-device. Credentials are stored in the
+  app's private storage on this device only.
+- **Read-only**: the mailbox is opened in IMAP read-only mode, so the app is
+  technically incapable of changing anything in your Gmail account.

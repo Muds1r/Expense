@@ -6,7 +6,6 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import androidx.work.workDataOf
 import java.util.concurrent.TimeUnit
 
 object SyncScheduler {
@@ -14,12 +13,11 @@ object SyncScheduler {
     private const val PERIODIC_WORK_NAME = "gmail-sync"
 
     /** Schedule a background sync every 6 hours (requires network). */
-    fun schedulePeriodic(context: Context, accountName: String) {
+    fun schedulePeriodic(context: Context) {
         val request = PeriodicWorkRequestBuilder<SyncWorker>(6, TimeUnit.HOURS)
             .setConstraints(
                 Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
             )
-            .setInputData(workDataOf(SyncWorker.KEY_ACCOUNT_NAME to accountName))
             .build()
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(

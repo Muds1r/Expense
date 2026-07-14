@@ -2,9 +2,7 @@ package com.expense.tracker
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -12,12 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Insights
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,11 +32,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -51,33 +47,17 @@ import com.expense.tracker.ui.MainViewModel
 import com.expense.tracker.ui.SyncState
 import com.expense.tracker.ui.screens.DashboardScreen
 import com.expense.tracker.ui.screens.InsightsScreen
-import com.expense.tracker.ui.screens.SignInScreen
+import com.expense.tracker.ui.screens.SetupScreen
 import com.expense.tracker.ui.screens.TransactionsScreen
 import com.expense.tracker.ui.theme.ExpenseTrackerTheme
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInClient
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.Scope
-import com.google.api.services.gmail.GmailScopes
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var signInClient: GoogleSignInClient
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestScopes(Scope(GmailScopes.GMAIL_READONLY))
-            .build()
-        signInClient = GoogleSignIn.getClient(this, gso)
-
         setContent {
             ExpenseTrackerTheme {
-                App(signInClient)
+                App()
             }
         }
     }
@@ -87,47 +67,23 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun App(signInClient: GoogleSignInClient) {
+private fun App() {
     val viewModel: MainViewModel = viewModel()
     val accountName by viewModel.accountName.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    var signInError by remember { mutableStateOf<String?>(null) }
 
-    val signInLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            .addOnSuccessListener { account ->
-                signInError = null
-                account.email?.let { viewModel.onSignedIn(it) }
-            }
-            .addOnFailureListener { e ->
-                val code = (e as? ApiException)?.statusCode
-                signInError = when (code) {
-                    GoogleSignInStatusCodes.DEVELOPER_ERROR ->
-                        "Sign-in rejected by Google (error 10: developer error).\n\n" +
-                            "This app's package name + SHA-1 aren't registered. In Google " +
-                            "Cloud Console create an Android OAuth client with package " +
-                            "\"com.expense.tracker\" and this device build's debug SHA-1, " +
-                            "and make sure your Gmail address is added as a test user."
-                    GoogleSignInStatusCodes.SIGN_IN_CANCELLED ->
-                        "Sign-in was cancelled."
-                    GoogleSignInStatusCodes.NETWORK_ERROR ->
-                        "Network error during sign-in. Check your connection and retry."
-                    else ->
-                        "Sign-in failed (code $code): ${e.message ?: "unknown error"}"
-                }
-            }
+    if (accountName == null) {
+        SetupScreen(
+            onConnect = { email, password -> viewModel.connect(email, password) },
+            isConnecting = syncState is SyncState.Syncing,
+            errorMessage = (syncState as? SyncState.Error)?.message
+        )
+        return
     }
-
-    val consentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { viewModel.syncNow() }
 
     LaunchedEffect(syncState) {
         when (val state = syncState) {
-            is SyncState.NeedsConsent -> consentLauncher.launch(state.intent)
             is SyncState.Error -> snackbarHostState.showSnackbar("Sync failed: ${state.message}")
             is SyncState.Success ->
                 snackbarHostState.showSnackbar("Synced ${state.count} transactions")
@@ -135,20 +91,9 @@ private fun App(signInClient: GoogleSignInClient) {
         }
     }
 
-    if (accountName == null) {
-        SignInScreen(
-            onSignInClick = {
-                signInError = null
-                signInLauncher.launch(signInClient.signInIntent)
-            },
-            errorMessage = signInError
-        )
-        return
-    }
-
     val tabs = listOf(
         Tab("dashboard", "Dashboard", Icons.Default.Dashboard),
-        Tab("transactions", "Transactions", Icons.Default.ReceiptLong),
+        Tab("transactions", "Transactions", Icons.AutoMirrored.Filled.ReceiptLong),
         Tab("insights", "Insights", Icons.Default.Insights)
     )
     val navController = rememberNavController()
@@ -175,10 +120,7 @@ private fun App(signInClient: GoogleSignInClient) {
                             Icon(Icons.Default.Sync, contentDescription = "Sync now")
                         }
                     }
-                    IconButton(onClick = {
-                        signInClient.signOut()
-                        viewModel.signOut()
-                    }) {
+                    IconButton(onClick = { viewModel.signOut() }) {
                         Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Sign out")
                     }
                 }

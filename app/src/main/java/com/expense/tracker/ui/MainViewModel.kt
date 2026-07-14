@@ -1,8 +1,6 @@
 package com.expense.tracker.ui
 
-import android.accounts.Account
 import android.app.Application
-import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.expense.tracker.data.SettingsStore
@@ -11,18 +9,19 @@ import com.expense.tracker.data.db.BankSummary
 import com.expense.tracker.data.db.CounterpartySummary
 import com.expense.tracker.data.db.TransactionEntity
 import com.expense.tracker.data.db.TxnType
-import com.expense.tracker.data.gmail.GmailClient
+import com.expense.tracker.data.mail.ImapClient
 import com.expense.tracker.sync.SyncScheduler
 import com.expense.tracker.sync.SyncWorker
-import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
+import javax.mail.AuthenticationFailedException
 
 enum class RangePreset(val label: String, val days: Int) {
     WEEK("7 days", 7),
@@ -35,8 +34,6 @@ sealed interface SyncState {
     data object Syncing : SyncState
     data class Success(val count: Int, val at: Long) : SyncState
     data class Error(val message: String) : SyncState
-    /** Gmail needs a one-time consent screen; launch [intent] from the Activity. */
-    data class NeedsConsent(val intent: Intent) : SyncState
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -88,11 +85,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _range.value = preset
     }
 
-    fun onSignedIn(name: String) {
+    /**
+     * First-time setup: verify the credentials by doing a full sync, and only
+     * store them (and schedule background sync) if the login succeeds.
+     */
+    fun connect(email: String, appPassword: String) {
+        if (_syncState.value is SyncState.Syncing) return
+        val cleanEmail = email.trim()
+        val cleanPassword = ImapClient.cleanAppPassword(appPassword)
+
         viewModelScope.launch {
-            settings.setAccountName(name)
-            SyncScheduler.schedulePeriodic(getApplication(), name)
-            syncNow()
+            _syncState.value = SyncState.Syncing
+            try {
+                val txns = ImapClient(cleanEmail, cleanPassword).fetchTransactions(SyncWorker.RETENTION_DAYS)
+                dao.insertAll(txns)
+                dao.deleteOlderThan(SyncWorker.retentionCutoff())
+                settings.setCredentials(cleanEmail, cleanPassword)
+                SyncScheduler.schedulePeriodic(getApplication())
+                val now = System.currentTimeMillis()
+                settings.setLastSync(now)
+                _syncState.value = SyncState.Success(txns.size, now)
+            } catch (e: AuthenticationFailedException) {
+                _syncState.value = SyncState.Error(
+                    "Gmail rejected the login. Check that the email is correct and that " +
+                        "you pasted a valid App Password (not your normal password). " +
+                        "Create one at myaccount.google.com/apppasswords — it requires " +
+                        "2-Step Verification to be enabled."
+                )
+            } catch (e: Exception) {
+                _syncState.value = SyncState.Error(e.message ?: "Connection failed")
+            }
         }
     }
 
@@ -106,21 +128,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun syncNow() {
-        val name = accountName.value ?: return
         if (_syncState.value is SyncState.Syncing) return
 
         viewModelScope.launch {
+            val email = settings.accountName.first() ?: return@launch
+            val password = settings.appPassword.first() ?: return@launch
             _syncState.value = SyncState.Syncing
             try {
-                val client = GmailClient(getApplication(), Account(name, "com.google"))
-                val txns = client.fetchTransactions(days = SyncWorker.RETENTION_DAYS)
+                val txns = ImapClient(email, password).fetchTransactions(SyncWorker.RETENTION_DAYS)
                 dao.insertAll(txns)
                 dao.deleteOlderThan(SyncWorker.retentionCutoff())
                 val now = System.currentTimeMillis()
                 settings.setLastSync(now)
                 _syncState.value = SyncState.Success(txns.size, now)
-            } catch (e: UserRecoverableAuthIOException) {
-                _syncState.value = SyncState.NeedsConsent(e.intent)
             } catch (e: Exception) {
                 _syncState.value = SyncState.Error(e.message ?: "Sync failed")
             }

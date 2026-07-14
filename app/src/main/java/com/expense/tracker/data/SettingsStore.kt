@@ -13,13 +13,18 @@ private val Context.dataStore by preferencesDataStore(name = "settings")
 class SettingsStore(private val context: Context) {
 
     private val accountKey = stringPreferencesKey("account_name")
+    private val appPasswordKey = stringPreferencesKey("app_password")
     private val lastSyncKey = longPreferencesKey("last_sync")
 
     val accountName: Flow<String?> = context.dataStore.data.map { it[accountKey] }
+    val appPassword: Flow<String?> = context.dataStore.data.map { it[appPasswordKey] }
     val lastSync: Flow<Long?> = context.dataStore.data.map { it[lastSyncKey] }
 
-    suspend fun setAccountName(name: String) {
-        context.dataStore.edit { it[accountKey] = name }
+    suspend fun setCredentials(email: String, appPassword: String) {
+        context.dataStore.edit {
+            it[accountKey] = email
+            it[appPasswordKey] = appPassword
+        }
     }
 
     suspend fun setLastSync(time: Long) {
