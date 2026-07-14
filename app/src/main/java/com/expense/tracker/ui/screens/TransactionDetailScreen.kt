@@ -370,6 +370,7 @@ private fun TransactionDetailContent(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SplitRow(
     split: SplitEntity,

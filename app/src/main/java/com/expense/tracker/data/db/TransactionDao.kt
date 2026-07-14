@@ -105,22 +105,22 @@ interface TransactionDao {
     @Insert
     suspend fun insertSplit(split: SplitEntity): Long
 
-    @Query("DELETE FROM splits WHERE id = :splitId")
+    @Query("DELETE FROM transaction_splits WHERE id = :splitId")
     suspend fun deleteSplit(splitId: Long)
 
-    @Query("DELETE FROM splits WHERE parentTxnId = :txnId")
+    @Query("DELETE FROM transaction_splits WHERE parentTxnId = :txnId")
     suspend fun deleteSplitsForTransaction(txnId: String)
 
-    @Query("SELECT * FROM splits WHERE parentTxnId = :txnId ORDER BY id ASC")
+    @Query("SELECT * FROM transaction_splits WHERE parentTxnId = :txnId ORDER BY id ASC")
     fun splitsForTransaction(txnId: String): Flow<List<SplitEntity>>
 
-    @Query("SELECT * FROM splits WHERE parentTxnId = :txnId ORDER BY id ASC")
+    @Query("SELECT * FROM transaction_splits WHERE parentTxnId = :txnId ORDER BY id ASC")
     suspend fun getSplitsForTransaction(txnId: String): List<SplitEntity>
 
-    @Query("SELECT * FROM splits WHERE id = :id")
+    @Query("SELECT * FROM transaction_splits WHERE id = :id")
     suspend fun getSplit(id: Long): SplitEntity?
 
-    @Query("UPDATE splits SET amount = :amount, categoryId = :categoryId, note = :note WHERE id = :id")
+    @Query("UPDATE transaction_splits SET amount = :amount, categoryId = :categoryId, note = :note WHERE id = :id")
     suspend fun updateSplit(id: Long, amount: Double, categoryId: Long?, note: String?)
 
     // ─── Queries: in-range transactions (exclude transfers in summaries) ──
