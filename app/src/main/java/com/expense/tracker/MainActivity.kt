@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Sync
@@ -50,6 +51,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.expense.tracker.ui.MainViewModel
 import com.expense.tracker.ui.SyncState
+import com.expense.tracker.ui.screens.CategoriesScreen
 import com.expense.tracker.ui.screens.DashboardScreen
 import com.expense.tracker.ui.screens.InsightsScreen
 import com.expense.tracker.ui.screens.SetupScreen
@@ -100,6 +102,7 @@ private fun App() {
     val tabs = listOf(
         Tab("dashboard", "Dashboard", Icons.Default.Dashboard),
         Tab("transactions", "Transactions", Icons.AutoMirrored.Filled.ReceiptLong),
+        Tab("budget", "Budget", Icons.Default.Category),
         Tab("insights", "Insights", Icons.Default.Insights)
     )
     val navController = rememberNavController()
@@ -199,6 +202,7 @@ private fun App() {
         ) {
             composable("dashboard") { DashboardScreen(viewModel) }
             composable("transactions") { TransactionsScreen(viewModel, onTransactionClick) }
+            composable("budget") { CategoriesScreen(viewModel) }
             composable("insights") { InsightsScreen(viewModel, onTransactionClick) }
             composable(
                 route = "transaction/{txnId}",

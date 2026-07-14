@@ -6,9 +6,15 @@ import androidx.room.PrimaryKey
 
 enum class TxnType { DEBIT, CREDIT }
 
+@Entity(tableName = "categories")
+data class CategoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String
+)
+
 @Entity(
     tableName = "transactions",
-    indices = [Index("timestamp"), Index("bank"), Index("counterparty")]
+    indices = [Index("timestamp"), Index("bank"), Index("counterparty"), Index("categoryId")]
 )
 data class TransactionEntity(
     /** Gmail message ID — guarantees we never store the same email twice. */
@@ -17,10 +23,12 @@ data class TransactionEntity(
     val accountLast4: String?,
     val amount: Double,
     val type: TxnType,
-    /** UPI ID, merchant, or person name extracted from the email. */
+    /** Person / merchant / beneficiary extracted from the email. */
     val counterparty: String?,
     /** Epoch millis of the email's internal date. */
     val timestamp: Long,
-    /** Email subject, kept for debugging/verification in the detail view. */
-    val subject: String
+    /** Email subject, kept for verification in the detail view. */
+    val subject: String,
+    /** User-assigned budget category; preserved across syncs. */
+    val categoryId: Long? = null
 )

@@ -7,6 +7,8 @@ import androidx.work.WorkInfo
 import com.expense.tracker.data.SettingsStore
 import com.expense.tracker.data.db.AppDatabase
 import com.expense.tracker.data.db.BankSummary
+import com.expense.tracker.data.db.CategoryEntity
+import com.expense.tracker.data.db.CategorySummary
 import com.expense.tracker.data.db.CounterpartySummary
 import com.expense.tracker.data.db.TransactionEntity
 import com.expense.tracker.data.db.TxnType
@@ -118,6 +120,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .flatMapLatest { dao.mostFrequentCounterparties(TxnType.DEBIT, rangeStart(it), Long.MAX_VALUE, limit = 5) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val categories: StateFlow<List<CategoryEntity>> = dao.allCategories()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val categorySummaries: StateFlow<List<CategorySummary>> = _range
+        .flatMapLatest { dao.categorySummaries(rangeStart(it), Long.MAX_VALUE) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     /** Stable Room Flow — do not wrap in stateIn here (that caused detail-screen flicker). */
     fun observeTransaction(id: String) = dao.observeTransaction(id)
 
@@ -125,6 +134,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun cachedTransaction(id: String): TransactionEntity? =
         transactions.value.find { it.id == id }
             ?: topTransactions.value.find { it.id == id }
+
+    fun setCategory(txnId: String, categoryId: Long?) {
+        viewModelScope.launch { dao.setCategory(txnId, categoryId) }
+    }
+
+    fun addCategory(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            if (categories.value.any { it.name.equals(trimmed, ignoreCase = true) }) return@launch
+            dao.insertCategory(CategoryEntity(name = trimmed))
+        }
+    }
+
+    fun deleteCategory(id: Long) {
+        viewModelScope.launch {
+            dao.clearCategoryFromTransactions(id)
+            dao.deleteCategory(id)
+        }
+    }
 
     fun setRange(preset: RangePreset) {
         _range.value = preset

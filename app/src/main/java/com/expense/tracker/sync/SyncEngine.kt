@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 object SyncEngine {
 
     const val RETENTION_DAYS = 60
-    const val SYNC_LOGIC_VERSION = 2
+    const val SYNC_LOGIC_VERSION = 3
     private val OVERLAP_MS = TimeUnit.DAYS.toMillis(1)
 
     fun retentionCutoff(): Long =
@@ -47,7 +47,7 @@ object SyncEngine {
 
         val since = if (forceFull) retentionCutoff() else sinceFor(settings)
         val transactions = ImapClient(email, password).fetchTransactions(since)
-        dao.insertAll(transactions)
+        dao.upsertParsed(transactions)
         dao.deleteOlderThan(retentionCutoff())
         settings.setLastSync(System.currentTimeMillis())
         settings.setSyncMarker(SYNC_LOGIC_VERSION)

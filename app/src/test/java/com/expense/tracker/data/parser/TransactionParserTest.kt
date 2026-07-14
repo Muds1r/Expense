@@ -139,4 +139,60 @@ class TransactionParserTest {
         )
         assertEquals(null, txn)
     }
+
+    @Test
+    fun `allied bank myABL sent email uses beneficiary name`() {
+        val txn = TransactionParser.parse(
+            messageId = "6",
+            fromHeader = "Allied Bank <alerts@abl.com>",
+            subject = "Transaction Alert",
+            body = """
+                Dear MUHAMMAD MUBASHIR MUNIR KHAN,
+
+                PKR 48,000.00 have been sent from your Account No: ***0013 on Tuesday , 14-Jul-2026 at 05:34 PM through myABL.
+
+                Transaction details are as follow:
+
+                Transaction Description :	RAAST Transfer
+                Beneficiary Name :	SAIFULLAH AKHTAR
+                Beneficiary Account :	***1309
+                Fee/Tax Charged :	Rs. 0.00
+                Transaction Reference :	472602
+            """.trimIndent(),
+            timestamp = 1000L
+        )
+        assertNotNull(txn)
+        assertEquals(TxnType.DEBIT, txn!!.type)
+        assertEquals(48000.0, txn.amount, 0.01)
+        assertEquals("Allied Bank", txn.bank)
+        assertEquals("0013", txn.accountLast4)
+        assertEquals("SAIFULLAH AKHTAR", txn.counterparty)
+    }
+
+    @Test
+    fun `allied bank purchase debit uses merchant from description`() {
+        val txn = TransactionParser.parse(
+            messageId = "7",
+            fromHeader = "Allied Bank <alerts@abl.com>",
+            subject = "Transaction Alert",
+            body = """
+                Dear MUHAMMAD MUBASHIR MUNIR KHAN
+
+                A Debit transaction of PKR 2,673.00 was made in your Account No: 0535****170013 (MUHAMMAD MUBASHIR MUNIR KHAN) in EXPRESSWAY KHANNA, RAWALPINDI branch on Saturday, 11 Jul 2026 at  4:21PM.
+
+                Transaction description :              PURCHASE SAFFRON FOODIES RAWALPINDI PBPK
+                Instrument / Cheque#  :              818137
+
+                If you need any further assistance, please contact our HelpLine on 042-111225225.
+
+                Allied Bank
+            """.trimIndent(),
+            timestamp = 1000L
+        )
+        assertNotNull(txn)
+        assertEquals(TxnType.DEBIT, txn!!.type)
+        assertEquals(2673.0, txn.amount, 0.01)
+        assertEquals("0013", txn.accountLast4)
+        assertEquals("SAFFRON FOODIES RAWALPINDI PBPK", txn.counterparty)
+    }
 }
