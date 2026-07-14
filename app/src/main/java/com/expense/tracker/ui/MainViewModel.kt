@@ -118,9 +118,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .flatMapLatest { dao.mostFrequentCounterparties(TxnType.DEBIT, rangeStart(it), Long.MAX_VALUE, limit = 5) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun transaction(id: String): StateFlow<TransactionEntity?> =
-        dao.observeTransaction(id)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    /** Stable Room Flow — do not wrap in stateIn here (that caused detail-screen flicker). */
+    fun observeTransaction(id: String) = dao.observeTransaction(id)
+
+    /** Instant lookup from lists already on screen — avoids a blank/not-found flash. */
+    fun cachedTransaction(id: String): TransactionEntity? =
+        transactions.value.find { it.id == id }
+            ?: topTransactions.value.find { it.id == id }
 
     fun setRange(preset: RangePreset) {
         _range.value = preset
