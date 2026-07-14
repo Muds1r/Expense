@@ -28,6 +28,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             Result.success(
                 workDataOf(KEY_COUNT to count, KEY_AT to System.currentTimeMillis())
             )
+        } catch (_: SyncCancelledException) {
+            Result.success(workDataOf(KEY_COUNT to 0, KEY_AT to System.currentTimeMillis()))
         } catch (e: AuthenticationFailedException) {
             Result.failure(
                 workDataOf(

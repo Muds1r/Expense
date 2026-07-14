@@ -188,6 +188,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun signOut() {
         viewModelScope.launch {
+            SyncEngine.invalidate()
             SyncScheduler.cancel(getApplication())
             settings.clear()
             dao.deleteOlderThan(Long.MAX_VALUE)

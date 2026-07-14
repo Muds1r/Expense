@@ -6,8 +6,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.Flow
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
@@ -36,6 +37,16 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setSyncMarker(version: Int) {
         context.dataStore.edit { it[syncMarkerKey] = version }
+    }
+
+    suspend fun budgetAlertLevel(categoryId: Long, periodKey: String): Int {
+        val key = intPreferencesKey("budget_alert_${categoryId}_$periodKey")
+        return context.dataStore.data.map { it[key] ?: 0 }.first()
+    }
+
+    suspend fun setBudgetAlertLevel(categoryId: Long, periodKey: String, level: Int) {
+        val key = intPreferencesKey("budget_alert_${categoryId}_$periodKey")
+        context.dataStore.edit { it[key] = level }
     }
 
     suspend fun clear() {

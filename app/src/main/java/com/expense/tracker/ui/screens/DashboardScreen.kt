@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -42,15 +40,11 @@ fun DashboardScreen(viewModel: MainViewModel) {
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item { RangeSelector(viewModel) }
-
         item { NetBalanceCard(totalIn, totalOut) }
-
         item { SectionHeader("By bank") }
-
         if (summaries.isEmpty()) {
             item { EmptyState("No transactions yet. Tap the sync icon to fetch your Gmail alerts.") }
         }
-
         items(summaries, key = { it.bank }) { summary -> BankCard(summary) }
     }
 }
@@ -58,20 +52,19 @@ fun DashboardScreen(viewModel: MainViewModel) {
 @Composable
 private fun NetBalanceCard(totalIn: Double, totalOut: Double) {
     val net = totalIn - totalOut
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-        )
-    ) {
+    SoftHeroCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp)) {
-            Text("Net for this period", style = MaterialTheme.typography.labelMedium)
+            Text(
+                "Net for this period",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Spacer(Modifier.height(4.dp))
             Text(
                 (if (net >= 0) "+" else "") + formatAmount(net),
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = if (net >= 0) IncomeGreen else ExpenseRed
             )
             Spacer(Modifier.height(16.dp))
             Row {
@@ -84,7 +77,7 @@ private fun NetBalanceCard(totalIn: Double, totalOut: Double) {
 
 @Composable
 private fun BankCard(summary: BankSummary) {
-    Card(Modifier.fillMaxWidth()) {
+    SoftCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 InitialAvatar(summary.bank, MaterialTheme.colorScheme.primary, size = 38)
@@ -102,7 +95,7 @@ private fun BankCard(summary: BankSummary) {
                 )
             }
             Spacer(Modifier.height(10.dp))
-            HorizontalDivider()
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(10.dp))
             Row {
                 AmountColumn("In", summary.totalIn, IncomeGreen, Modifier.weight(1f))
@@ -122,16 +115,7 @@ private fun AmountColumn(
     modifier: Modifier = Modifier
 ) {
     Column(modifier) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            formatAmount(amount),
-            style = MaterialTheme.typography.bodyMedium,
-            color = color,
-            fontWeight = FontWeight.Medium
-        )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(formatAmount(amount), style = MaterialTheme.typography.bodyMedium, color = color, fontWeight = FontWeight.Medium)
     }
 }

@@ -1,8 +1,11 @@
 package com.expense.tracker.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -44,16 +46,59 @@ import com.expense.tracker.ui.formatDate
 import com.expense.tracker.ui.theme.ExpenseRed
 import com.expense.tracker.ui.theme.IncomeGreen
 
+/** Soft translucent card — minimal elevation, light border. */
+@Composable
+fun SoftCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = modifier.then(
+            if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+        ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.52f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(content = content)
+    }
+}
+
+@Composable
+fun SoftHeroCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+    ) {
+        Column(content = content)
+    }
+}
+
 @Composable
 fun RangeSelector(viewModel: MainViewModel) {
     val range by viewModel.range.collectAsState()
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
         RangePreset.entries.forEachIndexed { index, preset ->
             SegmentedButton(
                 selected = range == preset,
                 onClick = { viewModel.setRange(preset) },
                 shape = SegmentedButtonDefaults.itemShape(index, RangePreset.entries.size),
-                label = { Text(preset.label) }
+                label = { Text(preset.label) },
+                colors = SegmentedButtonDefaults.colors(
+                    inactiveContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.35f)
+                )
             )
         }
     }
@@ -64,21 +109,18 @@ fun SectionHeader(title: String) {
     Text(
         title,
         style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
+        fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
     )
 }
 
 @Composable
 fun CollapsibleHeader(title: String, expanded: Boolean, onToggle: () -> Unit) {
-    Card(
+    SoftCard(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp)
-            .clickable(onClick = onToggle),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        )
+            .padding(top = 6.dp),
+        onClick = onToggle
     ) {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -87,12 +129,13 @@ fun CollapsibleHeader(title: String, expanded: Boolean, onToggle: () -> Unit) {
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
             Icon(
                 if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                contentDescription = if (expanded) "Collapse" else "Expand"
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -103,20 +146,20 @@ fun EmptyState(message: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 24.dp),
+            .padding(vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             Icons.Outlined.Inbox,
             contentDescription = null,
-            modifier = Modifier.size(40.dp),
-            tint = MaterialTheme.colorScheme.outline
+            modifier = Modifier.size(36.dp),
+            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
         )
         Spacer(Modifier.height(8.dp))
         Text(
             message,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
         )
     }
 }
@@ -129,18 +172,18 @@ fun initialsOf(name: String): String =
         .ifEmpty { "?" }
 
 @Composable
-fun InitialAvatar(name: String, tint: Color, size: Int = 42) {
+fun InitialAvatar(name: String, tint: Color, size: Int = 40) {
     Box(
         modifier = Modifier
             .size(size.dp)
             .clip(CircleShape)
-            .background(tint.copy(alpha = 0.14f)),
+            .background(tint.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center
     ) {
         Text(
             initialsOf(name),
-            color = tint,
-            fontWeight = FontWeight.Bold,
+            color = tint.copy(alpha = 0.9f),
+            fontWeight = FontWeight.SemiBold,
             style = MaterialTheme.typography.labelLarge
         )
     }
@@ -150,10 +193,9 @@ fun InitialAvatar(name: String, tint: Color, size: Int = 42) {
 fun TransactionRow(txn: TransactionEntity, showDate: Boolean = true, onClick: (() -> Unit)? = null) {
     val isCredit = txn.type == TxnType.CREDIT
     val color = if (isCredit) IncomeGreen else ExpenseRed
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+    SoftCard(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
     ) {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -188,14 +230,13 @@ fun TransactionRow(txn: TransactionEntity, showDate: Boolean = true, onClick: ((
             Text(
                 (if (isCredit) "+" else "-") + formatAmount(txn.amount),
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 color = color
             )
         }
     }
 }
 
-/** Ranked leaderboard row with a bar showing size relative to the top entry. */
 @Composable
 fun RankedRow(
     rank: Int,
@@ -205,7 +246,7 @@ fun RankedRow(
     fraction: Float,
     color: Color
 ) {
-    Card(Modifier.fillMaxWidth()) {
+    SoftCard(modifier = Modifier.fillMaxWidth()) {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -213,7 +254,7 @@ fun RankedRow(
             Text(
                 "$rank",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.width(24.dp)
             )
@@ -231,7 +272,7 @@ fun RankedRow(
                     Text(
                         valueText,
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.SemiBold,
                         color = color
                     )
                 }
@@ -244,16 +285,16 @@ fun RankedRow(
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(6.dp)
+                        .height(5.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Box(
                         Modifier
                             .fillMaxWidth(fraction.coerceIn(0.02f, 1f))
-                            .height(6.dp)
+                            .height(5.dp)
                             .clip(RoundedCornerShape(3.dp))
-                            .background(color.copy(alpha = 0.75f))
+                            .background(color.copy(alpha = 0.65f))
                     )
                 }
             }
@@ -266,13 +307,17 @@ fun StatItem(label: String, amount: Double, color: Color, modifier: Modifier = M
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier
-                .size(10.dp)
+                .size(8.dp)
                 .clip(CircleShape)
-                .background(color)
+                .background(color.copy(alpha = 0.85f))
         )
         Spacer(Modifier.width(8.dp))
         Column {
-            Text(label, style = MaterialTheme.typography.labelSmall)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Text(
                 formatAmount(amount),
                 style = MaterialTheme.typography.titleSmall,

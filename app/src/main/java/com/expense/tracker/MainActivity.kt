@@ -1,9 +1,14 @@
 package com.expense.tracker
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -25,12 +30,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,10 +45,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -74,6 +83,8 @@ class MainActivity : ComponentActivity() {
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
+private const val SNACKBAR_FRESH_MS = 30_000L
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun App() {
@@ -81,21 +92,48 @@ private fun App() {
     val accountName by viewModel.accountName.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* Sync proceeds either way; FG notification needs grant on API 33+. */ }
+
+    fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     if (accountName == null) {
         SetupScreen(
-            onConnect = { email, password -> viewModel.connect(email, password) },
+            onConnect = { email, password ->
+                ensureNotificationPermission()
+                viewModel.connect(email, password)
+            },
             isConnecting = syncState is SyncState.Syncing,
             errorMessage = (syncState as? SyncState.Error)?.message
         )
         return
     }
 
+    LaunchedEffect(Unit) {
+        ensureNotificationPermission()
+    }
+
     LaunchedEffect(syncState) {
         when (val state = syncState) {
             is SyncState.Error -> snackbarHostState.showSnackbar("Sync failed: ${state.message}")
-            is SyncState.Success ->
-                snackbarHostState.showSnackbar("Synced ${state.count} transactions")
+            is SyncState.Success -> {
+                // Ignore stale WorkManager success from a previous session.
+                if (System.currentTimeMillis() - state.at <= SNACKBAR_FRESH_MS) {
+                    snackbarHostState.showSnackbar("Synced ${state.count} transactions")
+                }
+            }
             else -> Unit
         }
     }
@@ -124,10 +162,17 @@ private fun App() {
         navController.navigate("category/${id ?: -1L}")
     }
 
+    val barContainer = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.72f)
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = barContainer,
+                    scrolledContainerColor = barContainer
+                ),
                 navigationIcon = {
                     if (isDetail) {
                         IconButton(onClick = { navController.popBackStack() }) {
@@ -137,13 +182,17 @@ private fun App() {
                 },
                 title = {
                     if (detailTitle != null) {
-                        Text(detailTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(
+                            detailTitle,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     } else {
                         Column {
                             Text(
                                 "Expense Tracker",
                                 style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.SemiBold
                             )
                             Text(
                                 accountName ?: "",
@@ -160,7 +209,10 @@ private fun App() {
                         if (syncState is SyncState.Syncing) {
                             CircularProgressIndicator(Modifier.padding(12.dp).height(24.dp))
                         } else {
-                            IconButton(onClick = { viewModel.syncNow() }) {
+                            IconButton(onClick = {
+                                ensureNotificationPermission()
+                                viewModel.syncNow()
+                            }) {
                                 Icon(Icons.Default.Sync, contentDescription = "Sync now")
                             }
                         }
@@ -174,7 +226,11 @@ private fun App() {
         bottomBar = {
             if (!isDetail) {
                 Column {
-                    NavigationBar(windowInsets = WindowInsets(0)) {
+                    NavigationBar(
+                        windowInsets = WindowInsets(0),
+                        containerColor = barContainer,
+                        tonalElevation = NavigationBarDefaults.Elevation
+                    ) {
                         tabs.forEach { tab ->
                             NavigationBarItem(
                                 selected = currentRoute == tab.route,
@@ -193,11 +249,11 @@ private fun App() {
                     Text(
                         "Made By Muds1r",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.surfaceContainer)
+                            .background(barContainer)
                             .navigationBarsPadding()
                             .padding(bottom = 4.dp)
                     )
