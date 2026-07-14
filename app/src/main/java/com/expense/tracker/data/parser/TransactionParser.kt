@@ -4,11 +4,9 @@ import com.expense.tracker.data.db.TransactionEntity
 import com.expense.tracker.data.db.TxnType
 
 /**
- * Generic parser for Pakistani bank / wallet transaction alert emails.
- *
- * Banks phrase alerts differently but almost all follow the shape:
- *   "<Rs/PKR> <amount> <debited/credited/...> ... <to/from/beneficiary>"
- * We extract each piece with tolerant regexes instead of one brittle mega-pattern.
+ * Shared parser for Pakistani bank / wallet alerts (Allied, Meezan, HBL, UBL,
+ * NayaPay, JazzCash, etc.). Label-based fields like "Beneficiary Name" apply to
+ * every bank — not Allied only.
  */
 object TransactionParser {
 
@@ -19,63 +17,88 @@ object TransactionParser {
 
     private val debitKeywords = listOf(
         "debited", "debit transaction", "have been sent", "has been sent",
-        "spent", "you sent", "sent from your", "sent to", "withdrawn",
-        "withdrawal", "paid", "purchase", "payment of", "transferred to", "debit"
+        "amount sent", "you sent", "sent from your", "sent to", "withdrawn",
+        "withdrawal", "paid", "purchase", "payment of", "transferred to",
+        "payment made", "funds transferred", "debit"
     )
     private val creditKeywords = listOf(
         "credited", "credit transaction", "have been received", "has been received",
-        "received", "you got", "deposited", "deposit", "transferred from", "credit"
+        "amount received", "you got", "received", "deposited", "deposit",
+        "transferred from", "funds received", "credit"
     )
 
-    private val accountRegex = Regex(
-        """(?:a/c|account|acct|card)\s*(?:no\.?)?\s*:?\s*(?:ending\s*(?:in|with)?)?\s*[Xx*\d]*(\d{4})\b""",
-        RegexOption.IGNORE_CASE
+    private val accountRegexes = listOf(
+        Regex(
+            """(?:a/c|account|acct|card)\s*(?:no\.?|number|#)?\s*:?\s*(?:ending\s*(?:in|with)?)?\s*[Xx*\d]*(\d{4})\b""",
+            RegexOption.IGNORE_CASE
+        ),
+        Regex("""\b(?:IBAN|Raast\s*ID)\s*[/:.]?\s*[A-Z0-9*]*?(\d{4})\b""", RegexOption.IGNORE_CASE),
+        Regex("""\bxxx+(\d{4})\b""", RegexOption.IGNORE_CASE),
+        Regex("""\*{2,}(\d{4})\b""")
     )
 
-    // Name endings: "on <date>", "via", "ref", punctuation, newline, emoji, or end.
-    private const val NAME_END = """(?=\s+on\b|\s+via\b|\s+ref\b|[.,]|\s*\r?\n|\s*[^\x00-\x7F]|\s*$)"""
+    private const val NAME_END =
+        """(?=\s+on\b|\s+via\b|\s+ref\b|\s+for\b|\s+with\b|[.,]|\s*\r?\n|\s*[^\x00-\x7F]|\s*$)"""
 
-    // Allied / myABL: "Beneficiary Name : SAIFULLAH AKHTAR"
-    private val beneficiaryNameRegex = Regex(
-        """Beneficiary Name\s*:?\s*([A-Z][A-Za-z .'\-]{2,50}?)(?=\s*\r?\n|\s*Beneficiary|\s*Fee|\s*Transaction|\s*$)""",
-        RegexOption.IGNORE_CASE
+    /** Labeled fields used by many Pakistani banks / wallets. */
+    private val labeledNameRegexes = listOf(
+        Regex(
+            """(?:Beneficiary|Receiver|Recipient|Payee|Merchant|Customer)\s*Name\s*:?\s*([A-Z][A-Za-z0-9 .&'\-]{2,50}?)(?=\s*\r?\n|\s*[A-Z][a-z]+\s*:|\s*$)""",
+            RegexOption.IGNORE_CASE
+        ),
+        Regex(
+            """(?:Sender|Remitter|Payer|Source)\s*Name\s*:?\s*([A-Z][A-Za-z0-9 .&'\-]{2,50}?)(?=\s*\r?\n|\s*[A-Z][a-z]+\s*:|\s*$)""",
+            RegexOption.IGNORE_CASE
+        ),
+        Regex(
+            """(?:Beneficiary|Receiver|Destination|Source)\s*Acc(?:ount)?\.?\s*Title\s*:?\s*:?\s*([A-Z][A-Za-z0-9 .&'\-]{2,50}?)(?=\s*\r?\n|\s*[A-Z][a-z]+\s*:|\s*AC#|\s*PK\d{2}|\s*$)""",
+            RegexOption.IGNORE_CASE
+        ),
+        Regex(
+            """Beneficiary Account(?:\s*Title)?(?:\s*:)+\s*([A-Z][A-Za-z0-9.&'\- ]{1,40}?)(?=\s+AC#|\s+PK\d{2}|\s*\r?\n|\s*$)"""
+        ),
+        Regex(
+            """(?:To|From)\s*Account\s*Title\s*:?\s*([A-Z][A-Za-z0-9 .&'\-]{2,50}?)(?=\s*\r?\n|\s*$)""",
+            RegexOption.IGNORE_CASE
+        )
     )
 
-    // Meezan: "Beneficiary Account : M.MUNIR AC# ..." / "Beneficiary Account Title: : M.MUDASIR"
-    private val beneficiaryAccountRegex = Regex(
-        """Beneficiary Account(?:\s*Title)?(?:\s*:)+\s*([A-Z][A-Za-z0-9.&'\- ]{1,40}?)(?=\s+AC#|\s+PK\d{2}|\s*\r?\n|\s*$)"""
-    )
-
-    // "Transaction description : PURCHASE SAFFRON FOODIES RAWALPINDI PBPK"
     private val purchaseDescRegex = Regex(
-        """(?:Transaction\s+description|description)\s*:?\s*(?:PURCHASE\s+)?([A-Z0-9][A-Za-z0-9 .&'\-]{2,50}?)(?=\s*\r?\n|\s*Instrument|\s*Cheque|\s*Fee|\s*$)""",
+        """(?:Transaction\s+description|description|narration|particulars)\s*:?\s*(?:PURCHASE\s+|POS\s+|ATM\s+)?([A-Z0-9][A-Za-z0-9 .&'\-]{2,50}?)(?=\s*\r?\n|\s*Instrument|\s*Cheque|\s*Fee|\s*TID|\s*$)""",
         RegexOption.IGNORE_CASE
     )
 
-    private val creditCounterpartyRegexes = listOf(
-        beneficiaryNameRegex,
-        beneficiaryAccountRegex,
+    private val creditInlineRegexes = listOf(
         Regex("""\bfrom\s+VPA\s+([\w.\-@]+)""", RegexOption.IGNORE_CASE),
         Regex("""\bfrom\s+([\w.\-]+@[\w]+)""", RegexOption.IGNORE_CASE),
         Regex("""Source Acc\.?\s*Title\s*:?\s*([A-Z][A-Za-z .'\-]{2,40}?)$NAME_END"""),
+        Regex("""\byou got\s+(?:Rs\.?|PKR\.?|₨)?\s*[\d,]+\.?\d*\s+from\s+([A-Z][A-Za-z .'\-]{2,50}?)$NAME_END""", RegexOption.IGNORE_CASE),
+        Regex("""\breceived\s+(?:from|by)\s+(?:Mr\.?\s+|Ms\.?\s+|M/s\.?\s+)?([A-Z][A-Za-z .'\-]{2,50}?)$NAME_END""", RegexOption.IGNORE_CASE),
         Regex("""\b(?:from|by)\s+(?:Mr\.?\s+|Ms\.?\s+|M/s\.?\s+)?([A-Z][A-Za-z '\-]{2,40}?)$NAME_END""")
     )
 
-    private val debitCounterpartyRegexes = listOf(
-        beneficiaryNameRegex,
-        beneficiaryAccountRegex,
+    private val debitInlineRegexes = listOf(
         purchaseDescRegex,
         Regex("""\bto\s+VPA\s+([\w.\-@]+)""", RegexOption.IGNORE_CASE),
         Regex("""\bto\s+([\w.\-]+@[\w]+)""", RegexOption.IGNORE_CASE),
         Regex("""Destination Acc\.?\s*Title\s*:?\s*([A-Z][A-Za-z .'\-]{2,40}?)$NAME_END"""),
+        Regex("""\byou sent\s+(?:Rs\.?|PKR\.?|₨)?\s*[\d,]+\.?\d*\s+to\s+([A-Z][A-Za-z .'\-]{2,50}?)$NAME_END""", RegexOption.IGNORE_CASE),
         Regex("""\bat\s+([A-Z0-9][\w .&'\-*]{2,40}?)$NAME_END"""),
         Regex("""\bto\s+(?:Mr\.?\s+|Ms\.?\s+|M/s\.?\s+)?([A-Z][A-Za-z '\-]{2,40}?)$NAME_END""")
+    )
+
+    private val subjectNameRegexes = listOf(
+        Regex("""you (?:got|received)\s+(?:Rs\.?|PKR\.?|₨)?\s*[\d,]+\.?\d*\s+from\s+(.+?)(?:\s*[^\x00-\x7F]|\s*$)""", RegexOption.IGNORE_CASE),
+        Regex("""you sent\s+(?:Rs\.?|PKR\.?|₨)?\s*[\d,]+\.?\d*\s+to\s+(.+?)(?:\s*[^\x00-\x7F]|\s*$)""", RegexOption.IGNORE_CASE),
+        Regex("""(?:payment|transfer)\s+to\s+([A-Z][A-Za-z .'\-]{2,50})""", RegexOption.IGNORE_CASE),
+        Regex("""(?:payment|transfer)\s+from\s+([A-Z][A-Za-z .'\-]{2,50})""", RegexOption.IGNORE_CASE)
     )
 
     private val counterpartyStopWords = setOf(
         "your", "account", "the", "bank", "info", "credit", "debit", "call", "sms",
         "net", "banking", "upi", "neft", "imps", "rtgs", "atm", "linked", "raast",
-        "transfer", "transaction", "description", "purchase"
+        "transfer", "transaction", "description", "purchase", "dear", "customer",
+        "branch", "through", "myabl", "mobile", "app", "pakistan", "limited"
     )
 
     fun parse(
@@ -101,17 +124,9 @@ object TransactionParser {
             else -> return null
         }
 
-        val accountLast4 = accountRegex.find(text)?.groupValues?.get(1)
+        val accountLast4 = accountRegexes.firstNotNullOfOrNull { it.find(text)?.groupValues?.get(1) }
 
-        val regexes = if (type == TxnType.DEBIT) debitCounterpartyRegexes else creditCounterpartyRegexes
-        val counterparty = regexes.firstNotNullOfOrNull { regex ->
-            regex.findAll(text)
-                .map { it.groupValues[1].trim() }
-                .firstOrNull { candidate ->
-                    candidate.length in 3..60 &&
-                        candidate.lowercase().split(" ").none { it in counterpartyStopWords }
-                }
-        }
+        val counterparty = extractCounterparty(type, text, subject)
 
         return TransactionEntity(
             id = messageId,
@@ -119,10 +134,40 @@ object TransactionParser {
             accountLast4 = accountLast4,
             amount = amount,
             type = type,
-            counterparty = counterparty?.trimEnd('.', ',', ' '),
+            counterparty = counterparty,
             timestamp = timestamp,
             subject = subject,
             categoryId = null
         )
     }
+
+    private fun extractCounterparty(type: TxnType, text: String, subject: String): String? {
+        // 1) Labeled fields (Beneficiary Name, Sender Name, Acc Title, …) — all banks
+        val labeled = labeledNameRegexes.firstNotNullOfOrNull { regex ->
+            regex.findAll(text).map { it.groupValues[1].trim() }.firstOrNull(::isGoodName)
+        }
+        if (labeled != null) return cleanName(labeled)
+
+        // 2) Direction-specific inline phrasing
+        val inline = (if (type == TxnType.DEBIT) debitInlineRegexes else creditInlineRegexes)
+            .firstNotNullOfOrNull { regex ->
+                regex.findAll(text).map { it.groupValues[1].trim() }.firstOrNull(::isGoodName)
+            }
+        if (inline != null) return cleanName(inline)
+
+        // 3) Subject line (NayaPay-style and similar)
+        val fromSubject = subjectNameRegexes.firstNotNullOfOrNull { regex ->
+            regex.find(subject)?.groupValues?.get(1)?.trim()?.takeIf(::isGoodName)
+        }
+        return fromSubject?.let(::cleanName)
+    }
+
+    private fun isGoodName(candidate: String): Boolean {
+        if (candidate.length !in 3..60) return false
+        if (candidate.all { it.isDigit() || it == '*' || it == 'X' || it == 'x' || it == ' ' }) return false
+        return candidate.lowercase().split(Regex("""[\s./\-]+""")).none { it in counterpartyStopWords }
+    }
+
+    private fun cleanName(name: String): String =
+        name.trimEnd('.', ',', ' ', '\t').replace(Regex("""\s+"""), " ")
 }

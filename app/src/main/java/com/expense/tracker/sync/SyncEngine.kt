@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 object SyncEngine {
 
     const val RETENTION_DAYS = 60
-    const val SYNC_LOGIC_VERSION = 3
+    const val SYNC_LOGIC_VERSION = 4
     private val OVERLAP_MS = TimeUnit.DAYS.toMillis(1)
 
     fun retentionCutoff(): Long =
