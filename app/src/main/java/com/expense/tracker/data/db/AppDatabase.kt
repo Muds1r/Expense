@@ -22,7 +22,7 @@ class Converters {
 
 @Database(
     entities = [TransactionEntity::class, CategoryEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -48,6 +48,12 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE categories ADD COLUMN budgetAmount REAL")
+            }
+        }
+
         private val DEFAULT_CATEGORIES = listOf(
             "Food", "Transport", "Bills", "Shopping", "Family", "Transfer", "Other"
         )
@@ -59,16 +65,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "expense-tracker.db"
                 )
-                    .addMigrations(MIGRATION_1_2)
-                    .addCallback(object : Callback() {
-                        override fun onCreate(db: SupportSQLiteDatabase) {
-                            // Seed defaults on brand-new installs (migration seeds separately).
-                        }
-
-                        override fun onOpen(db: SupportSQLiteDatabase) {
-                            // Ensure defaults exist after migrate/create.
-                        }
-                    })
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { database ->
                         instance = database

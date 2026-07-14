@@ -9,7 +9,9 @@ enum class TxnType { DEBIT, CREDIT }
 @Entity(tableName = "categories")
 data class CategoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val name: String
+    val name: String,
+    /** Optional spending limit for this category (PKR). Null = no budget set. */
+    val budgetAmount: Double? = null
 )
 
 @Entity(

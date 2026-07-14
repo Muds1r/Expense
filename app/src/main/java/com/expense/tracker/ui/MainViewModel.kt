@@ -20,6 +20,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -154,6 +155,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             dao.deleteCategory(id)
         }
     }
+
+    fun setCategoryBudget(id: Long, budgetAmount: Double?) {
+        viewModelScope.launch { dao.setCategoryBudget(id, budgetAmount) }
+    }
+
+    fun observeCategory(id: Long) = dao.observeCategory(id)
+
+    fun transactionsForCategory(categoryId: Long?): Flow<List<TransactionEntity>> =
+        _range.flatMapLatest { dao.transactionsForCategory(categoryId, rangeStart(it), Long.MAX_VALUE) }
 
     fun setRange(preset: RangePreset) {
         _range.value = preset

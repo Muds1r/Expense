@@ -52,6 +52,7 @@ import androidx.navigation.navArgument
 import com.expense.tracker.ui.MainViewModel
 import com.expense.tracker.ui.SyncState
 import com.expense.tracker.ui.screens.CategoriesScreen
+import com.expense.tracker.ui.screens.CategoryDetailScreen
 import com.expense.tracker.ui.screens.DashboardScreen
 import com.expense.tracker.ui.screens.InsightsScreen
 import com.expense.tracker.ui.screens.SetupScreen
@@ -108,10 +109,19 @@ private fun App() {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val isDetail = currentRoute?.startsWith("transaction/") == true
+    val isDetail = currentRoute?.startsWith("transaction/") == true ||
+        currentRoute?.startsWith("category/") == true
+    val detailTitle = when {
+        currentRoute?.startsWith("transaction/") == true -> "Transaction"
+        currentRoute?.startsWith("category/") == true -> "Category"
+        else -> null
+    }
 
     val onTransactionClick: (String) -> Unit = { id ->
         navController.navigate("transaction/${Uri.encode(id)}")
+    }
+    val onCategoryClick: (Long?) -> Unit = { id ->
+        navController.navigate("category/${id ?: -1L}")
     }
 
     Scaffold(
@@ -126,8 +136,8 @@ private fun App() {
                     }
                 },
                 title = {
-                    if (isDetail) {
-                        Text("Transaction", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    if (detailTitle != null) {
+                        Text(detailTitle, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     } else {
                         Column {
                             Text(
@@ -202,8 +212,19 @@ private fun App() {
         ) {
             composable("dashboard") { DashboardScreen(viewModel) }
             composable("transactions") { TransactionsScreen(viewModel, onTransactionClick) }
-            composable("budget") { CategoriesScreen(viewModel) }
+            composable("budget") { CategoriesScreen(viewModel, onCategoryClick) }
             composable("insights") { InsightsScreen(viewModel, onTransactionClick) }
+            composable(
+                route = "category/{categoryId}",
+                arguments = listOf(navArgument("categoryId") { type = NavType.LongType })
+            ) { entry ->
+                val raw = entry.arguments?.getLong("categoryId") ?: -1L
+                CategoryDetailScreen(
+                    viewModel = viewModel,
+                    categoryId = raw.takeIf { it >= 0 },
+                    onTransactionClick = onTransactionClick
+                )
+            }
             composable(
                 route = "transaction/{txnId}",
                 arguments = listOf(navArgument("txnId") { type = NavType.StringType })

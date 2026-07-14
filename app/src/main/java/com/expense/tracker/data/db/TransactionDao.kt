@@ -27,7 +27,8 @@ data class CategorySummary(
     val categoryName: String,
     val totalIn: Double,
     val totalOut: Double,
-    val txnCount: Int
+    val txnCount: Int,
+    val budgetAmount: Double?
 )
 
 @Dao
@@ -142,11 +143,12 @@ interface TransactionDao {
                COALESCE(c.name, 'Uncategorized') AS categoryName,
                SUM(CASE WHEN t.type = 'CREDIT' THEN t.amount ELSE 0 END) AS totalIn,
                SUM(CASE WHEN t.type = 'DEBIT' THEN t.amount ELSE 0 END) AS totalOut,
-               COUNT(*) AS txnCount
+               COUNT(*) AS txnCount,
+               c.budgetAmount AS budgetAmount
         FROM transactions t
         LEFT JOIN categories c ON c.id = t.categoryId
         WHERE t.timestamp BETWEEN :start AND :end
-        GROUP BY t.categoryId, categoryName
+        GROUP BY t.categoryId, categoryName, c.budgetAmount
         ORDER BY totalOut DESC, totalIn DESC
         """
     )
@@ -161,6 +163,12 @@ interface TransactionDao {
         """
     )
     fun transactionsForCategory(categoryId: Long?, start: Long, end: Long): Flow<List<TransactionEntity>>
+
+    @Query("SELECT * FROM categories WHERE id = :id")
+    fun observeCategory(id: Long): Flow<CategoryEntity?>
+
+    @Query("UPDATE categories SET budgetAmount = :budgetAmount WHERE id = :id")
+    suspend fun setCategoryBudget(id: Long, budgetAmount: Double?)
 
     @Query("SELECT COUNT(*) FROM transactions")
     fun count(): Flow<Int>
