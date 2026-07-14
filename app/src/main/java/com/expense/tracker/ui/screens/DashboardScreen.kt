@@ -9,10 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,24 +26,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.expense.tracker.data.db.BankSummary
 import com.expense.tracker.ui.MainViewModel
-import com.expense.tracker.ui.RangePreset
 import com.expense.tracker.ui.formatAmount
 import com.expense.tracker.ui.theme.ExpenseRed
 import com.expense.tracker.ui.theme.IncomeGreen
-
-@Composable
-fun RangeSelector(viewModel: MainViewModel) {
-    val range by viewModel.range.collectAsState()
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        RangePreset.entries.forEach { preset ->
-            FilterChip(
-                selected = range == preset,
-                onClick = { viewModel.setRange(preset) },
-                label = { Text(preset.label) }
-            )
-        }
-    }
-}
 
 @Composable
 fun DashboardScreen(viewModel: MainViewModel) {
@@ -53,51 +39,45 @@ fun DashboardScreen(viewModel: MainViewModel) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item { RangeSelector(viewModel) }
 
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TotalCard("Received", totalIn, IncomeGreen, Modifier.weight(1f))
-                TotalCard("Spent", totalOut, ExpenseRed, Modifier.weight(1f))
-            }
-        }
+        item { NetBalanceCard(totalIn, totalOut) }
 
-        item {
-            Text(
-                "By bank",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        item { SectionHeader("By bank") }
 
         if (summaries.isEmpty()) {
-            item {
-                Text(
-                    "No transactions yet. Pull down or tap sync to fetch your Gmail alerts.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            item { EmptyState("No transactions yet. Tap the sync icon to fetch your Gmail alerts.") }
         }
 
-        items(summaries) { summary -> BankCard(summary) }
+        items(summaries, key = { it.bank }) { summary -> BankCard(summary) }
     }
 }
 
 @Composable
-private fun TotalCard(label: String, amount: Double, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
-        Column(Modifier.padding(16.dp)) {
-            Text(label, style = MaterialTheme.typography.labelMedium)
+private fun NetBalanceCard(totalIn: Double, totalOut: Double) {
+    val net = totalIn - totalOut
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Text("Net for this period", style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(4.dp))
             Text(
-                formatAmount(amount),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = color
+                (if (net >= 0) "+" else "") + formatAmount(net),
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
             )
+            Spacer(Modifier.height(16.dp))
+            Row {
+                StatItem("Received", totalIn, IncomeGreen, Modifier.weight(1f))
+                StatItem("Spent", totalOut, ExpenseRed, Modifier.weight(1f))
+            }
         }
     }
 }
@@ -105,8 +85,10 @@ private fun TotalCard(label: String, amount: Double, color: androidx.compose.ui.
 @Composable
 private fun BankCard(summary: BankSummary) {
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                InitialAvatar(summary.bank, MaterialTheme.colorScheme.primary, size = 38)
+                Spacer(Modifier.width(12.dp))
                 Text(
                     summary.bank,
                     style = MaterialTheme.typography.titleMedium,
@@ -119,28 +101,37 @@ private fun BankCard(summary: BankSummary) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
             HorizontalDivider()
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
             Row {
-                Column(Modifier.weight(1f)) {
-                    Text("In", style = MaterialTheme.typography.labelSmall)
-                    Text(formatAmount(summary.totalIn), color = IncomeGreen, fontWeight = FontWeight.Medium)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text("Out", style = MaterialTheme.typography.labelSmall)
-                    Text(formatAmount(summary.totalOut), color = ExpenseRed, fontWeight = FontWeight.Medium)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text("Net", style = MaterialTheme.typography.labelSmall)
-                    val net = summary.totalIn - summary.totalOut
-                    Text(
-                        formatAmount(net),
-                        color = if (net >= 0) IncomeGreen else ExpenseRed,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+                AmountColumn("In", summary.totalIn, IncomeGreen, Modifier.weight(1f))
+                AmountColumn("Out", summary.totalOut, ExpenseRed, Modifier.weight(1f))
+                val net = summary.totalIn - summary.totalOut
+                AmountColumn("Net", net, if (net >= 0) IncomeGreen else ExpenseRed, Modifier.weight(1f))
             }
         }
+    }
+}
+
+@Composable
+private fun AmountColumn(
+    label: String,
+    amount: Double,
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            formatAmount(amount),
+            style = MaterialTheme.typography.bodyMedium,
+            color = color,
+            fontWeight = FontWeight.Medium
+        )
     }
 }

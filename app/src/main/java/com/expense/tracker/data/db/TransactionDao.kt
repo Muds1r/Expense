@@ -22,7 +22,9 @@ data class CounterpartySummary(
 @Dao
 interface TransactionDao {
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    // REPLACE so that parser improvements retroactively fix already-stored rows
+    // on the next sync (the message ID key keeps this duplicate-safe).
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(transactions: List<TransactionEntity>)
 
     @Query("DELETE FROM transactions WHERE timestamp < :cutoff")

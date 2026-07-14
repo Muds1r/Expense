@@ -1,22 +1,14 @@
 package com.expense.tracker.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.expense.tracker.data.db.CounterpartySummary
 import com.expense.tracker.ui.MainViewModel
@@ -34,73 +26,57 @@ fun InsightsScreen(viewModel: MainViewModel) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item { RangeSelector(viewModel) }
 
         item { SectionHeader("Top senders (money in)") }
-        if (topReceived.isEmpty()) item { EmptyHint() }
-        items(topReceived) { CounterpartyRow(it, IncomeGreen, showCount = false) }
+        if (topReceived.isEmpty()) item { EmptyState("Nothing here for this period.") }
+        leaderboard(topReceived, IncomeGreen, byCount = false, keyPrefix = "in")
 
         item { SectionHeader("Top spends (money out)") }
-        if (topPaid.isEmpty()) item { EmptyHint() }
-        items(topPaid) { CounterpartyRow(it, ExpenseRed, showCount = false) }
+        if (topPaid.isEmpty()) item { EmptyState("Nothing here for this period.") }
+        leaderboard(topPaid, ExpenseRed, byCount = false, keyPrefix = "out")
 
         item { SectionHeader("Most frequent payments") }
-        if (mostFrequent.isEmpty()) item { EmptyHint() }
-        items(mostFrequent) { CounterpartyRow(it, ExpenseRed, showCount = true) }
+        if (mostFrequent.isEmpty()) item { EmptyState("Nothing here for this period.") }
+        leaderboard(mostFrequent, ExpenseRed, byCount = true, keyPrefix = "freq")
 
         item { SectionHeader("Top 10 transactions") }
-        if (topTxns.isEmpty()) item { EmptyHint() }
-        items(topTxns, key = { "top-" + it.id }) { TransactionRow(it) }
+        if (topTxns.isEmpty()) item { EmptyState("Nothing here for this period.") }
+        itemsIndexed(topTxns, key = { _, txn -> "top-" + txn.id }) { _, txn ->
+            TransactionRow(txn)
+        }
     }
 }
 
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(top = 8.dp)
-    )
-}
-
-@Composable
-private fun EmptyHint() {
-    Text(
-        "Nothing here for this period.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-}
-
-@Composable
-private fun CounterpartyRow(
-    summary: CounterpartySummary,
-    amountColor: androidx.compose.ui.graphics.Color,
-    showCount: Boolean
+private fun androidx.compose.foundation.lazy.LazyListScope.leaderboard(
+    entries: List<CounterpartySummary>,
+    color: androidx.compose.ui.graphics.Color,
+    byCount: Boolean,
+    keyPrefix: String
 ) {
-    Card(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    summary.counterparty,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    "${summary.txnCount} transaction${if (summary.txnCount == 1) "" else "s"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                if (showCount) "${summary.txnCount}×" else formatAmount(summary.total),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = amountColor
-            )
-        }
+    val max = if (byCount) {
+        entries.maxOfOrNull { it.txnCount.toDouble() } ?: 1.0
+    } else {
+        entries.maxOfOrNull { it.total } ?: 1.0
+    }
+    itemsIndexed(
+        entries,
+        key = { _, e -> "$keyPrefix-${e.counterparty}" }
+    ) { index, entry ->
+        RankedRow(
+            rank = index + 1,
+            name = entry.counterparty,
+            subtitle = "${entry.txnCount} transaction${if (entry.txnCount == 1) "" else "s"}" +
+                if (byCount) " · ${formatAmount(entry.total)} total" else "",
+            valueText = if (byCount) "${entry.txnCount}×" else formatAmount(entry.total),
+            fraction = if (byCount) {
+                (entry.txnCount.toDouble() / max).toFloat()
+            } else {
+                (entry.total / max).toFloat()
+            },
+            color = color
+        )
     }
 }
